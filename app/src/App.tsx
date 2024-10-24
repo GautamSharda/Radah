@@ -14,7 +14,7 @@ function App() {
   }, []);
 
   if (isLoading) {
-    return <div>Loading Computer Use Demo... This may take up to 5 seconds.</div>;
+    return <div>Loading Computer Use Demo... This may take up to 30 seconds.</div>;
   }
 
   if (error) {

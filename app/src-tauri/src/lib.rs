@@ -1,23 +1,28 @@
 use std::process::Command;
 use std::path::PathBuf;
 use std::env;
+use std::net::TcpListener;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+fn is_port_in_use(port: u16) -> bool {
+    TcpListener::bind(("127.0.0.1", port)).is_err()
+}
+
 fn build_and_run_docker() -> Result<(), String> {
     println!("Checking if Docker container is already running...");
 
     // Check if the container is already running
-    let check_output = Command::new("docker")
-        .args(&["ps", "-q", "-f", "name=computer-use-demo"])
+    let ps_output = Command::new("docker")
+        .args(&["ps", "-q", "-f", "ancestor=ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest"])
         .output()
         .map_err(|e| e.to_string())?;
 
-    if !check_output.stdout.is_empty() {
-        println!("Container is already running. Using existing container.");
+    if !ps_output.stdout.is_empty() {
+        println!("Container is already running.");
         return Ok(());
     }
 
@@ -48,12 +53,9 @@ fn build_and_run_docker() -> Result<(), String> {
         .output()
         .map_err(|e| e.to_string())?;
 
-    println!("Docker run command executed. Checking status...");
-
     if !run_output.status.success() {
         let error = String::from_utf8_lossy(&run_output.stderr);
-        println!("Docker run failed. Error: {}", error);
-        return Err(error.to_string());
+        return Err(format!("Docker run failed. Error: {}", error));
     }
 
     println!("Docker container started successfully.");
