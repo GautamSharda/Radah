@@ -1,9 +1,19 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  // Your existing config...
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  css: {
+    postcss: {
+      configFile: path.resolve(__dirname, 'postcss.config.js'),
+    },
+  },
   clearScreen: false,
   server: {
     strictPort: true,

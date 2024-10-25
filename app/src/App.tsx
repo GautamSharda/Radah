@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { core } from '@tauri-apps/api';
+import { invoke } from '@tauri-apps/api/core';
 import "./App.css";
+import { Button } from "../components/ui/button";
 
 function App() {
   const [occupiedPorts, setOccupiedPorts] = useState<number[]>([]);
@@ -8,7 +9,7 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
 
   useEffect(() => {
-    core.invoke<number[]>('get_occupied_ports').then(setOccupiedPorts);
+    invoke<number[]>('get_occupied_ports').then(setOccupiedPorts);
   }, []);
 
   const addNewAgent = () => {
@@ -23,7 +24,7 @@ function App() {
           <p>The Anthropic Computer Use Demo requires that the following ports be unoccupied: 5900, 8501, 6080, 8080</p>
           <p>However, the following ports were found to be occupied: {occupiedPorts.join(', ')}</p>
           <p>Please free those ports and then click reload.</p>
-          <button onClick={() => window.location.reload()}>Reload</button>
+          <Button onClick={() => window.location.reload()}>Reload</Button>
         </div>
       );
     } else if (selectedAgent === 'Agent 1') {
@@ -55,20 +56,21 @@ function App() {
       <div className="sidebar">
         <h2 className="sidebar-title">Agent</h2>
         {agents.map((agent) => (
-          <button
+          <Button
             key={agent}
+            variant="outline"
             className="agent-button"
             onClick={() => setSelectedAgent(agent)}
           >
             {agent}
-          </button>
+          </Button>
         ))}
-        <button
+        <Button
           className="add-agent-button"
           onClick={addNewAgent}
         >
           Add new agent
-        </button>
+        </Button>
       </div>
 
       {/* Main content area */}
