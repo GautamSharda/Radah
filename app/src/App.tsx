@@ -1,63 +1,40 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/tauri";
 import "./App.css";
+import VNCView from "./components/VNCView";
+import Sidebar from "./components/Sidebar";
 
 function App() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [occupiedPorts, setOccupiedPorts] = useState<number[]>([]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 30000); // 30 seconds timeout
-
-    return () => clearTimeout(timer);
+    invoke<number[]>('get_occupied_ports').then(setOccupiedPorts);
   }, []);
 
-  if (isLoading) {
-    return <div>Loading Computer Use Demo... This may take up to 30 seconds.</div>;
-  }
+  const renderContent = () => {
+    if (occupiedPorts.length > 0) {
+      return (
+        <div className="error-message">
+          <p>The Anthropic Computer Use Demo requires that the following ports be unoccupied: 5900, 8501, 6080, 8080</p>
+          <p>However, the following ports were found to be occupied: {occupiedPorts.join(', ')}</p>
+          <p>Please free those ports and then click reload.</p>
+          <button onClick={() => window.location.reload()}>Reload</button>
+        </div>
+      );
+    }
 
-  if (error) {
     return (
-      <div>
-        <p>Error: {error}</p>
-        <p>
-          An error occurred while starting the Docker container. 
-          Please try running the following command in your terminal:
-        </p>
-        <pre>
-          <code>
-            {`docker run \\
-    -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \\
-    -v $HOME/.anthropic:/home/computeruse/.anthropic \\
-    -p 5900:5900 \\
-    -p 8501:8501 \\
-    -p 6080:6080 \\
-    -p 8080:8080 \\
-    -it ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest`}
-          </code>
-        </pre>
-        <p>
-          If the command works in your terminal but not in the app, please check that:
-        </p>
-        <ul>
-          <li>The ANTHROPIC_API_KEY environment variable is set correctly.</li>
-          <li>Docker is running and you have the necessary permissions.</li>
-          <li>The required ports (5900, 8501, 6080, 8080) are not in use by other applications.</li>
-        </ul>
-      </div>
+      <>
+        <Sidebar />
+        <VNCView />
+      </>
     );
-  }
+  };
 
   return (
-    <>
-      <div>Radah</div>
-      <iframe
-        src="http://localhost:8080"
-        style={{ width: "100%", height: "calc(100vh - 30px)", border: "1px solid #ccc" }}
-        title="Radah"
-      />
-    </>
+    <div className="container">
+      {renderContent()}
+    </div>
   );
 }
 
