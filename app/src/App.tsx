@@ -54,7 +54,7 @@ function App() {
     <div className="app-container">
       {/* Sidebar */}
       <div className="sidebar">
-        <h2 className="sidebar-title">Agent</h2>
+        <h2 className="sidebar-title">Agents</h2>
         {agents.map((agent) => (
           <Button
             key={agent}
@@ -69,7 +69,7 @@ function App() {
           className="add-agent-button"
           onClick={addNewAgent}
         >
-          Add new agent
+          New agent
         </Button>
       </div>
 
