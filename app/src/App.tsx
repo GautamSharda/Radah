@@ -42,29 +42,54 @@ function App() {
     setSelectedAssistant(null);
   };
 
-  const renderOnboardingFlow = () => (
-    <Card className="w-[400px] mx-auto mt-20">
-      <CardHeader>
-        <CardTitle>Create a New AI Assistant</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="mb-4">Choose an AI assistant type:</p>
-        <RadioGroup onValueChange={handleAssistantSelect}>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="jim" id="jim" />
-            <label htmlFor="jim">J.I.M (Jobs and Internships Matchmaker)</label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="pam" id="pam" />
-            <label htmlFor="pam">P.A.M (Performs Anything Machine)</label>
-          </div>
-        </RadioGroup>
-      </CardContent>
-      <CardFooter>
-        <Button onClick={handleNext} disabled={!selectedAssistant}>Next</Button>
-      </CardFooter>
-    </Card>
-  );
+  const renderCard = () => {
+    switch (step) {
+      case 0:
+        return (
+          <Card className="w-[400px] mx-auto mt-20">
+            <CardHeader>
+              <CardTitle>Create a New AI Assistant</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="mb-4">Choose an AI assistant type:</p>
+              <RadioGroup onValueChange={handleAssistantSelect}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="jim" id="jim" />
+                  <label htmlFor="jim">J.I.M (Jobs and Internships Matchmaker)</label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="pam" id="pam" />
+                  <label htmlFor="pam">P.A.M (Performs Anything Machine)</label>
+                </div>
+              </RadioGroup>
+            </CardContent>
+            <CardFooter>
+              <Button onClick={handleNext} disabled={!selectedAssistant}>Next</Button>
+            </CardFooter>
+          </Card>
+        );
+      case 1:
+        return (
+          <Card className="w-[400px] mx-auto mt-20">
+            <CardHeader>
+              <CardTitle>{selectedAssistant === 'jim' ? 'Upload Resume' : 'Task Description'}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {selectedAssistant === 'jim' ? (
+                <Button onClick={() => console.log('Open file picker')}>Upload Resume</Button>
+              ) : (
+                <Textarea placeholder="Enter your task description here..." />
+              )}
+            </CardContent>
+            <CardFooter>
+              <Button onClick={handleCreateAssistant}>Create Assistant</Button>
+            </CardFooter>
+          </Card>
+        );
+      default:
+        return null;
+    }
+  };
 
   const renderMainContent = () => (
     <div className="flex">
@@ -81,24 +106,7 @@ function App() {
   return (
     <SidebarProvider>
       <RightSidebarProvider>
-        {(step === 0 || step === 1) && renderOnboardingFlow()}
-        {step === 1 && (
-          <Card className="w-[400px] mx-auto mt-4">
-            <CardHeader>
-              <CardTitle>{selectedAssistant === 'jim' ? 'Upload Resume' : 'Task Description'}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {selectedAssistant === 'jim' ? (
-                <Button onClick={() => console.log('Open file picker')}>Upload Resume</Button>
-              ) : (
-                <Textarea placeholder="Enter your task description here..." />
-              )}
-            </CardContent>
-            <CardFooter>
-              <Button onClick={handleCreateAssistant}>Create Assistant</Button>
-            </CardFooter>
-          </Card>
-        )}
+        {step < 2 && renderCard()}
         {step === 2 && !isCreatingNewAgent && renderMainContent()}
       </RightSidebarProvider>
     </SidebarProvider>
