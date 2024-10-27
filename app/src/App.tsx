@@ -7,9 +7,16 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 
+interface Agent {
+  type: 'jim' | 'pam';
+  number: number;
+}
+
 function App() {
   const [step, setStep] = React.useState(0);
   const [selectedAssistant, setSelectedAssistant] = React.useState<string | null>(null);
+  const [agents, setAgents] = React.useState<Agent[]>([]);
+  const [isCreatingNewAgent, setIsCreatingNewAgent] = React.useState(false);
 
   const handleAssistantSelect = (value: string) => {
     setSelectedAssistant(value);
@@ -20,41 +27,63 @@ function App() {
   };
 
   const handleCreateAssistant = () => {
+    if (selectedAssistant) {
+      const existingAgents = agents.filter(agent => agent.type === selectedAssistant);
+      const newAgentNumber = existingAgents.length + 1;
+      setAgents([...agents, { type: selectedAssistant as 'jim' | 'pam', number: newAgentNumber }]);
+    }
     setStep(2);
+    setIsCreatingNewAgent(false);
   };
+
+  const handleNewAgentClick = () => {
+    setIsCreatingNewAgent(true);
+    setStep(0);
+    setSelectedAssistant(null);
+  };
+
+  const renderOnboardingFlow = () => (
+    <Card className="w-[400px] mx-auto mt-20">
+      <CardHeader>
+        <CardTitle>Create a New AI Assistant</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="mb-4">Choose an AI assistant type:</p>
+        <RadioGroup onValueChange={handleAssistantSelect}>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="jim" id="jim" />
+            <label htmlFor="jim">J.I.M (Jobs and Internships Matchmaker)</label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="pam" id="pam" />
+            <label htmlFor="pam">P.A.M (Performs Anything Machine)</label>
+          </div>
+        </RadioGroup>
+      </CardContent>
+      <CardFooter>
+        <Button onClick={handleNext} disabled={!selectedAssistant}>Next</Button>
+      </CardFooter>
+    </Card>
+  );
+
+  const renderMainContent = () => (
+    <div className="flex">
+      <AppSidebar agents={agents} onNewAgentClick={handleNewAgentClick} />
+      <main className="flex-grow flex justify-between">
+        <SidebarTrigger />
+        {/* Main content goes here */}
+        <RightSidebarTrigger />
+      </main>
+      <RightSidebar />
+    </div>
+  );
 
   return (
     <SidebarProvider>
       <RightSidebarProvider>
-        {step === 0 && (
-          <Card className="w-[400px] mx-auto mt-20">
-            <CardHeader>
-              <CardTitle>Welcome to Radah - The AI app</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="mb-4">Here, you can create and manage AI assistants. We offer the following assistants</p>
-              <RadioGroup onValueChange={handleAssistantSelect}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="jim" id="jim" />
-                  <label htmlFor="jim">J.I.M (Jobs and Internships Matchmaker)</label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="pam" id="pam" />
-                  <label htmlFor="pam">P.A.M (Performs Anything Machine)</label>
-                </div>
-              </RadioGroup>
-              <div className="flex items-center space-x-2">
-                <p className="mb-4">Pick an assistant to get started</p>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button onClick={handleNext} disabled={!selectedAssistant}>Next</Button>
-            </CardFooter>
-          </Card>
-        )}
-
+        {(step === 0 || step === 1) && renderOnboardingFlow()}
         {step === 1 && (
-          <Card className="w-[400px] mx-auto mt-20">
+          <Card className="w-[400px] mx-auto mt-4">
             <CardHeader>
               <CardTitle>{selectedAssistant === 'jim' ? 'Upload Resume' : 'Task Description'}</CardTitle>
             </CardHeader>
@@ -70,18 +99,7 @@ function App() {
             </CardFooter>
           </Card>
         )}
-
-        {step === 2 && (
-          <div className="flex">
-            <AppSidebar />
-            <main className="flex-grow flex justify-between">
-              <SidebarTrigger />
-              {/* Main content goes here */}
-              <RightSidebarTrigger />
-            </main>
-            <RightSidebar />
-          </div>
-        )}
+        {step === 2 && !isCreatingNewAgent && renderMainContent()}
       </RightSidebarProvider>
     </SidebarProvider>
   )

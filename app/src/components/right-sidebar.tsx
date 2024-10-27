@@ -1,6 +1,6 @@
 import * as React from "react"
-import { Settings, HelpCircle, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { HelpCircle, Info } from "lucide-react"
 
 // Create a separate context for the right sidebar
 const RightSidebarContext = React.createContext<{
@@ -30,13 +30,6 @@ function useRightSidebar() {
 export function RightSidebar() {
   const { isOpen } = useRightSidebar()
 
-  // Menu items for the right sidebar
-  const items = [
-    { title: "Settings", url: "#", icon: Settings },
-    { title: "Help", url: "#", icon: HelpCircle },
-    { title: "About", url: "#", icon: Info },
-  ]
-
   return (
     <div className="relative">
       <div 
@@ -49,18 +42,7 @@ export function RightSidebar() {
       >
         <div className="p-4">
           <h2 className="text-lg font-semibold mb-4">Messages</h2>
-          <nav>
-            {items.map((item) => (
-              <a
-                key={item.title}
-                href={item.url}
-                className="flex items-center p-2 hover:bg-gray-100 rounded"
-              >
-                <item.icon className="mr-2" size={18} />
-                <span>{item.title}</span>
-              </a>
-            ))}
-          </nav>
+          {/* Content for messages can be added here */}
         </div>
       </div>
     </div>

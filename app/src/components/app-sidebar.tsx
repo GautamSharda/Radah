@@ -1,4 +1,4 @@
-import { Calendar, Home, Inbox, Search, Settings } from "lucide-react"
+import { Plus, Briefcase, Zap } from "lucide-react"
 
 import {
   Sidebar,
@@ -6,59 +6,49 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
 
-// Menu items.
-const items = [
-  {
-    title: "Home",
-    url: "#",
-    icon: Home,
-  },
-  {
-    title: "Inbox",
-    url: "#",
-    icon: Inbox,
-  },
-  {
-    title: "Calendar",
-    url: "#",
-    icon: Calendar,
-  },
-  {
-    title: "Search",
-    url: "#",
-    icon: Search,
-  },
-  {
-    title: "Settings",
-    url: "#",
-    icon: Settings,
-  },
-]
+interface Agent {
+  type: 'jim' | 'pam';
+  number: number;
+}
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  agents: Agent[];
+  onNewAgentClick: () => void;
+}
+
+export function AppSidebar({ agents, onNewAgentClick }: AppSidebarProps) {
   return (
     <Sidebar>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Agents</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-lg font-semibold mb-4 text-black">Agents</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <a href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            {agents.map((agent, index) => (
+              <Button 
+                key={index}
+                className="w-full justify-start mb-2" 
+                variant="secondary"
+              >
+                {agent.type === 'jim' ? (
+                  <>
+                    <Briefcase className="mr-2 h-4 w-4" />
+                    J.I.M {agent.number}
+                  </>
+                ) : (
+                  <>
+                    <Zap className="mr-2 h-4 w-4" />
+                    P.A.M {agent.number}
+                  </>
+                )}
+              </Button>
+            ))}
+            <Button className="w-full justify-start" variant="ghost" onClick={onNewAgentClick}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Agent
+            </Button>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
