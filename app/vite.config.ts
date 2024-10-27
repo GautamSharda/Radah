@@ -10,9 +10,7 @@ export default defineConfig({
     },
   },
   css: {
-    postcss: {
-      configFile: path.resolve(__dirname, 'postcss.config.js'),
-    },
+    postcss: "./postcss.config.js"
   },
   clearScreen: false,
   server: {
