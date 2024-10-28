@@ -17,6 +17,8 @@ function App() {
   const [selectedAssistant, setSelectedAssistant] = React.useState<string | null>(null);
   const [agents, setAgents] = React.useState<Agent[]>([]);
   const [isCreatingNewAgent, setIsCreatingNewAgent] = React.useState(false);
+  // Add new state for selected agent
+  const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(null);
 
   const handleAssistantSelect = (value: string) => {
     setSelectedAssistant(value);
@@ -30,7 +32,10 @@ function App() {
     if (selectedAssistant) {
       const existingAgents = agents.filter(agent => agent.type === selectedAssistant);
       const newAgentNumber = existingAgents.length + 1;
-      setAgents([...agents, { type: selectedAssistant as 'jim' | 'pam', number: newAgentNumber }]);
+      const newAgent = { type: selectedAssistant as 'jim' | 'pam', number: newAgentNumber };
+      setAgents([...agents, newAgent]);
+      // Select the newly created agent
+      setSelectedAgentId(`${newAgent.type}-${newAgent.number}`);
     }
     setStep(2);
     setIsCreatingNewAgent(false);
@@ -40,6 +45,11 @@ function App() {
     setIsCreatingNewAgent(true);
     setStep(0);
     setSelectedAssistant(null);
+  };
+
+  // Add handler for agent selection
+  const handleAgentSelect = (agentId: string) => {
+    setSelectedAgentId(agentId);
   };
 
   const renderCard = () => {
@@ -93,7 +103,12 @@ function App() {
 
   const renderMainContent = () => (
     <div className="flex">
-      <AppSidebar agents={agents} onNewAgentClick={handleNewAgentClick} />
+      <AppSidebar 
+        agents={agents} 
+        onNewAgentClick={handleNewAgentClick}
+        selectedAgentId={selectedAgentId}
+        onAgentSelect={handleAgentSelect}
+      />
       <main className="flex-grow flex justify-between">
         <SidebarTrigger />
         {/* Main content goes here */}
