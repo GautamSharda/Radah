@@ -7,6 +7,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { X } from "lucide-react"
+import { VncViewer } from '@/components/VncViewer';
 
 interface Agent {
   type: 'jim' | 'pam';
@@ -110,16 +111,26 @@ function App() {
   };
 
   const renderMainContent = () => (
-    <div className="flex">
+    <div className="flex h-screen">
       <AppSidebar 
         agents={agents} 
         onNewAgentClick={handleNewAgentClick}
         selectedAgentId={selectedAgentId}
         onAgentSelect={handleAgentSelect}
       />
-      <main className="flex-grow flex justify-between">
+      <main className="flex-grow flex flex-col relative">
         <SidebarTrigger />
-        {/* Main content goes here */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          {selectedAgentId ? (
+            <div className="w-full h-full p-4">
+              <VncViewer agentId={selectedAgentId} />
+            </div>
+          ) : (
+            <div className="text-gray-500">
+              Select an agent to view their environment
+            </div>
+          )}
+        </div>
         <RightSidebarTrigger />
       </main>
       <RightSidebar />

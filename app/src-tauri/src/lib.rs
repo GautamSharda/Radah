@@ -108,6 +108,101 @@ fn build_and_run_docker() -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize, Clone)]
+struct DockerContainer {
+    id: String,
+    vnc_port: u16,
+    agent_id: String,
+}
+
+static DOCKER_CONTAINERS: Lazy<Mutex<Vec<DockerContainer>>> = Lazy::new(|| Mutex::new(Vec::new()));
+
+fn get_available_ports(num_ports: u16) -> Result<Vec<u16>, String> {
+    let base_ports = vec![5900, 6080];
+    let mut available_ports = Vec::new();
+    
+    for base_port in base_ports {
+        for offset in 0..num_ports {
+            let port = base_port + (offset * 100);
+            if !is_port_in_use(port) {
+                available_ports.push(port);
+            }
+        }
+    }
+
+    if available_ports.len() < 2 {
+        return Err("Not enough available ports".to_string());
+    }
+
+    Ok(available_ports)
+}
+
+#[tauri::command]
+async fn create_agent_container(agent_id: String) -> Result<DockerContainer, String> {
+    let ports = get_available_ports(2)?;
+    let vnc_port = ports[0];
+    let novnc_port = ports[1];
+
+    println!("Starting Docker container for agent {}", agent_id);
+
+    // Build the Docker image if it doesn't exist
+    let build_output = Command::new("docker")
+        .args(&[
+            "build",
+            "-t",
+            "minimal-vnc-desktop",
+            "-f",
+            "Dockerfile",
+            "./",
+        ])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !build_output.status.success() {
+        let error = String::from_utf8_lossy(&build_output.stderr);
+        return Err(format!("Failed to build Docker image: {}", error));
+    }
+
+    // Run the Docker container
+    let run_output = Command::new("docker")
+        .args(&[
+            "run",
+            "-d",  // Run in detached mode
+            "-p", &format!("{}:5900", vnc_port),
+            "-p", &format!("{}:6080", novnc_port),
+            "--name", &format!("agent-{}", agent_id),
+            "minimal-vnc-desktop",
+        ])
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !run_output.status.success() {
+        let error = String::from_utf8_lossy(&run_output.stderr);
+        return Err(format!("Failed to start container: {}", error));
+    }
+
+    let container_id = String::from_utf8_lossy(&run_output.stdout)
+        .trim()
+        .to_string();
+
+    let container = DockerContainer {
+        id: container_id,
+        vnc_port: novnc_port,
+        agent_id,
+    };
+
+    let mut containers = DOCKER_CONTAINERS.lock().unwrap();
+    containers.push(container.clone());
+
+    Ok(container)
+}
+
+#[tauri::command]
+fn get_agent_container(agent_id: String) -> Option<DockerContainer> {
+    let containers = DOCKER_CONTAINERS.lock().unwrap();
+    containers.iter().find(|c| c.agent_id == agent_id).cloned()
+}
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -118,17 +213,32 @@ fn get_occupied_ports() -> Vec<u16> {
     OCCUPIED_PORTS.lock().unwrap().clone()
 }
 
+#[tauri::command]
+async fn cleanup_agent_container(agent_id: String) -> Result<(), String> {
+    let mut containers = DOCKER_CONTAINERS.lock().unwrap();
+    if let Some(pos) = containers.iter().position(|c| c.agent_id == agent_id) {
+        let container = containers.remove(pos);
+        
+        // Stop and remove the container
+        Command::new("docker")
+            .args(&["rm", "-f", &container.id])
+            .output()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .setup(|_app| {
-            if let Err(e) = build_and_run_docker() {
-                eprintln!("Failed to build and run Docker container: {}", e);
-            }
-            Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![greet, get_occupied_ports])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            get_occupied_ports,
+            create_agent_container,
+            get_agent_container,
+            cleanup_agent_container
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

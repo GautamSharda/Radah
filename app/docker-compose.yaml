@@ -1,8 +1,0 @@
-version: '3'
-services:
-  computer-use-demo:
-    build:
-      context: ../anthropic-quickstarts/computer-use-demo
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
