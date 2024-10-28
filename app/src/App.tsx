@@ -6,6 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { X } from "lucide-react"
 
 interface Agent {
   type: 'jim' | 'pam';
@@ -54,7 +55,15 @@ function App() {
     
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <Card className="w-[400px]">
+        <Card className="w-[400px] relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-2 top-2 z-10"
+            onClick={() => setStep(null)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
           {step === 0 ? (
             <>
               <CardHeader>
@@ -73,8 +82,7 @@ function App() {
                   </div>
                 </RadioGroup>
               </CardContent>
-              <CardFooter className="flex justify-between">
-                <Button variant="ghost" onClick={() => setStep(null)}>Cancel</Button>
+              <CardFooter className="flex justify-end">
                 <Button onClick={handleNext} disabled={!selectedAssistant}>Next</Button>
               </CardFooter>
             </>
