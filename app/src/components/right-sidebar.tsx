@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Button } from "@/components/ui/button"
-import { HelpCircle, Info } from "lucide-react"
+import { ChevronRight, ChevronLeft } from "lucide-react"
 
 // Create a separate context for the right sidebar
 const RightSidebarContext = React.createContext<{
@@ -59,7 +59,7 @@ export function RightSidebarTrigger() {
       onClick={() => setIsOpen(!isOpen)}
       className="fixed right-4 top-4 z-50"
     >
-      {isOpen ? <HelpCircle /> : <Info />}
+      {isOpen ? <ChevronRight /> : <ChevronLeft />}
     </Button>
   )
 }
