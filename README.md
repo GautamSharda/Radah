@@ -4,7 +4,7 @@ Agents in Radah have full control of their own desktop environments with various
 
 You can chat with your agents to give commands in natural language, watch them operate in their desktop environments to accomplish your assigned tasks, and interact with the environment yourself as needed.
 
-Because Radah aims to run on many platforms, it is a [Tauri](https://tauri.app/) application.
+Because Radah aims to run on many platforms, it is a [Tauri](https://tauri.app/) application. You can read their docs to figure out how to run Radah.
 
 To start contributing know that:
 
