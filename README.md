@@ -1,4 +1,4 @@
-Radah is an AI application that provides computer control agents. Radah is maintained by [RadahAI](https://radah.ai).
+Radah is an application that provides computer control AI agents. Radah is maintained by [RadahAI](https://radah.ai).
 
 Agents in Radah have full control of their own desktop environments with various applications that an agent can use to do tasks.
 
