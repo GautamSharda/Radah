@@ -2,7 +2,7 @@ Radah is an application that provides computer control AI agents. Radah is maint
 
 Agents in Radah have full control of their own desktop environments with various applications that an agent can use to do tasks.
 
-You can give commands to your agents in natural language, watch them operate in their desktop environments, and step in to provide help as needed.
+You can chat with your agents to give commands in natural language, watch them operate in their desktop environments to accomplish your assigned tasks, and interact with the environment yourself as needed.
 
 Because Radah aims to run on many platforms, it is a [Tauri](https://tauri.app/) application.
 
