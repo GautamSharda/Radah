@@ -31,20 +31,19 @@ export function RightSidebar() {
   const { isOpen } = useRightSidebar()
 
   return (
-    <div className={`relative transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-      <div 
+    <div
         className={`
           h-full bg-white border-l
-          transition-all duration-300 ease-in-out w-64
+          transition-all duration-300 ease-in-out
           ${isOpen ? 'w-64' : 'w-0 overflow-hidden'}
         `}
+        style={{ transitionProperty: 'width' }}
       >
         <div className="p-4">
           <h2 className="text-lg font-semibold mb-4">Messages</h2>
           {/* Content for messages can be added here */}
         </div>
       </div>
-    </div>
   )
 }
 
