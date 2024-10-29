@@ -6,7 +6,7 @@ You can chat with your agents to give commands in natural language, watch them o
 
 Because Radah aims to run on many platforms, it is a [Tauri](https://tauri.app/) application. You can read their docs to figure out how to run Radah.
 
-To start contributing know that:
+To start contributing join the community [discord server](https://discord.gg/JyhGGfsqHj) and know that:
 
 * At the moment we are focusing on building the following 3 components: the frontend, the agent environment(s), and the agents.
 
@@ -18,6 +18,6 @@ To start contributing know that:
 
 * For now, there will be at least 2 agents: Jobs & Internships Matchmaker (J.I.M) and Performs Anything Machine (P.A.M).
 
-Please read the issues to get started with making PRs. Feel free to create your own issues, we are especially interested in supporting all kinds of computer control agents for various purposes for now.
+ * Read the issues to get started with making PRs. Claim an issue but commenting "claiming" or something. Talk to me before doing so.
 
-Join the community [discord server](https://discord.gg/JyhGGfsqHj).
+ * Feel free to create your own issues, we are especially interested in supporting all kinds of computer control agents for various purposes for now.
