@@ -4,7 +4,24 @@ Agents in Radah have full control of their own desktop environments with various
 
 You can chat with your agents to give commands in natural language, watch them operate in their desktop environments to accomplish your assigned tasks, and interact with the environment yourself as needed.
 
-Because Radah aims to run on many platforms, it is a [Tauri](https://tauri.app/) application. You can read their docs to figure out how to run Radah.
+Because Radah aims to run on many platforms, it is a [Tauri](https://tauri.app/) application.
+
+# Running
+
+To run Radah, make sure you have Docker installed and running on your system.
+
+Then, run the following commands:
+
+```
+git clone https://github.com/GautamSharda/Radah.git
+cd Radah/app
+npm install
+npm run tauri dev
+```
+
+Wait a few seconds and the Radah application should open.
+
+# Contributing
 
 To start contributing join the community [discord server](https://discord.gg/JyhGGfsqHj) and know that:
 
