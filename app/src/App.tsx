@@ -111,7 +111,7 @@ function App() {
   };
 
   const renderMainContent = () => (
-    <div className="flex h-screen">
+    <div className="flex h-screen w-screen">
       <AppSidebar 
         agents={agents} 
         onNewAgentClick={handleNewAgentClick}
@@ -120,14 +120,14 @@ function App() {
       />
       <main className="flex-grow flex flex-col relative">
         <SidebarTrigger />
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="flex items-center justify-center h-screen">
           {selectedAgentId ? (
-            <div className="w-full h-full p-4">
+            <div className="w-full h-full p-4 flex justify-center items-center">
               <VncViewer agentId={selectedAgentId} />
             </div>
           ) : (
-            <div className="text-gray-500">
-              Select an agent to view their environment
+            <div className="flex justify-center items-center w-full h-full">
+              <p className='text-slate-900'>Select an agent to view their environment</p>
             </div>
           )}
         </div>
