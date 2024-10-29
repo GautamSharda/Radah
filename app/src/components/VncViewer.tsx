@@ -14,6 +14,7 @@ interface DockerContainer {
 export function VncViewer({ agentId }: VncViewerProps) {
   const [container, setContainer] = useState<DockerContainer | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -30,9 +31,13 @@ export function VncViewer({ agentId }: VncViewerProps) {
         
         if (mounted) {
           setContainer(containerInfo);
+          setError(null);
         }
       } catch (error) {
         console.error('Failed to initialize container:', error);
+        if (mounted) {
+          setError('Failed to initialize container');
+        }
       } finally {
         if (mounted) {
           setLoading(false);
@@ -42,7 +47,6 @@ export function VncViewer({ agentId }: VncViewerProps) {
 
     initContainer();
 
-    // Cleanup function
     return () => {
       mounted = false;
     };
@@ -52,16 +56,19 @@ export function VncViewer({ agentId }: VncViewerProps) {
     return <div>Loading VNC viewer...</div>;
   }
 
-  if (!container) {
-    return <div>Failed to load VNC viewer</div>;
+  if (error || !container) {
+    return <div>Failed to load VNC viewer: {error}</div>;
   }
+
+  // Just use localhost:6080 since we know that's the noVNC port
+  const vncUrl = "http://localhost:6080";
+  
+  console.log('Connecting to VNC at:', vncUrl);
 
   return (
     <div className="h-full w-full">
       <iframe
-        src={`http://localhost:${container.vnc_port}/vnc.html?autoconnect=1&resize=scale`}
-        className="w-full h-full border-none"
-        allow="fullscreen"
+        src={vncUrl}
       />
     </div>
   );

@@ -118,15 +118,23 @@ struct DockerContainer {
 static DOCKER_CONTAINERS: Lazy<Mutex<Vec<DockerContainer>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
 fn get_available_ports(num_ports: u16) -> Result<Vec<u16>, String> {
-    let base_ports = vec![5900, 6080];
     let mut available_ports = Vec::new();
     
-    for base_port in base_ports {
-        for offset in 0..num_ports {
-            let port = base_port + (offset * 100);
-            if !is_port_in_use(port) {
-                available_ports.push(port);
-            }
+    // Check VNC ports starting at 5900
+    for offset in 0..num_ports {
+        let port = 5900 + offset;
+        if !is_port_in_use(port) {
+            available_ports.push(port);
+            break;
+        }
+    }
+    
+    // Check noVNC ports starting at 6080
+    for offset in 0..num_ports {
+        let port = 6080 + offset;
+        if !is_port_in_use(port) {
+            available_ports.push(port);
+            break;
         }
     }
 
@@ -143,31 +151,34 @@ async fn create_agent_container(agent_id: String) -> Result<DockerContainer, Str
     let vnc_port = ports[0];
     let novnc_port = ports[1];
 
-    println!("Starting Docker container for agent {}", agent_id);
-
-    // Build the Docker image if it doesn't exist
+    println!("Building Docker image...");
+    
+    // Build the Docker image
     let build_output = Command::new("docker")
         .args(&[
             "build",
             "-t",
             "minimal-vnc-desktop",
-            "-f",
-            "Dockerfile",
-            "./",
+            env!("CARGO_MANIFEST_DIR"),  // This gets the directory containing Cargo.toml
         ])
         .output()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to build Docker image: {}", e))?;
 
     if !build_output.status.success() {
         let error = String::from_utf8_lossy(&build_output.stderr);
         return Err(format!("Failed to build Docker image: {}", error));
     }
 
+    println!("Starting Docker container for agent {} with VNC port {} and noVNC port {}", 
+             agent_id, vnc_port, novnc_port);
+
     // Run the Docker container
     let run_output = Command::new("docker")
         .args(&[
             "run",
             "-d",  // Run in detached mode
+            "-e", "DISPLAY=:0",
+            "-e", "GEOMETRY=1920x1080",
             "-p", &format!("{}:5900", vnc_port),
             "-p", &format!("{}:6080", novnc_port),
             "--name", &format!("agent-{}", agent_id),
