@@ -18,6 +18,6 @@ To start contributing join the community [discord server](https://discord.gg/Jyh
 
 * For now, there will be at least 2 agents: Jobs & Internships Matchmaker (J.I.M) and Performs Anything Machine (P.A.M).
 
- * Read the issues to get started with making PRs. Claim an issue but commenting "claiming" or something. Talk to me before doing so.
+ * Read the issues to get started with making PRs. Claim an issue by commenting "claiming" or something. Talk to me before doing so.
 
  * Feel free to create your own issues, we are especially interested in supporting all kinds of computer control agents for various purposes for now.
