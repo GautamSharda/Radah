@@ -31,14 +31,13 @@ export function RightSidebar() {
   const { isOpen } = useRightSidebar()
 
   return (
-    <div className="relative">
+    <div className={`relative transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
       <div 
         className={`
-          fixed top-0 right-0 h-full bg-white border-l
-          transition-transform duration-300 ease-in-out
-          ${isOpen ? 'translate-x-0' : 'translate-x-full'}
+          h-full bg-white border-l
+          transition-all duration-300 ease-in-out w-64
+          ${isOpen ? 'w-64' : 'w-0 overflow-hidden'}
         `}
-        style={{ width: '16rem' }} // Set a fixed width
       >
         <div className="p-4">
           <h2 className="text-lg font-semibold mb-4">Messages</h2>
@@ -48,6 +47,7 @@ export function RightSidebar() {
     </div>
   )
 }
+
 
 export function RightSidebarTrigger() {
   const { isOpen, setIsOpen } = useRightSidebar()
