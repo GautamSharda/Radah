@@ -6,7 +6,7 @@ You can chat with your agents to give commands in natural language, watch them o
 
 Because Radah aims to run on many platforms, it is a [Tauri](https://tauri.app/) application. You can read their docs to figure out how to run Radah.
 
-This application is open source because we think developers as well as RadahAI could both benefit from it. However, RadahAI is **not** an open source company and will release closed source products based on technology we open source.
+This application is open source because we think developers as well as RadahAI could both benefit from it. However, RadahAI will release closed source products based on technology we open source.
 
 To start contributing join the community [discord server](https://discord.gg/JyhGGfsqHj) and know that:
 
