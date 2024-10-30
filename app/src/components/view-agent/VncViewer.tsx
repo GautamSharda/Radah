@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { core } from '@tauri-apps/api';
 import { MessageInput } from './MessageInput';
-import Spinner from '../ui/spinner';
+import Spinner from '@/components/ui/spinner.tsx';
 
 interface VncViewerProps {
   agentId: string;
@@ -18,8 +18,8 @@ export function VncViewer({ agentId }: VncViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // just use localhost since we know that's the noVNC port
-  const vncUrl = "http://localhost:6080";
+  // Just use localhost:6080 since we know that's the noVNC port
+  const vncUrl = `http://localhost:6080?timestamp=${Date.now()}`;
 
   useEffect(() => {
     let mounted = true;
@@ -57,11 +57,11 @@ export function VncViewer({ agentId }: VncViewerProps) {
     };
   }, [agentId]);
 
-  if (loading) {
+  if (!loading) {
     return (
       <div className='flex justify-center items-center flex-col gap-2'>
         <p>Loading VNC viewer...</p>
-        <Spinner size="medium"/>
+        <Spinner/>
       </div>
     );
   }
@@ -71,7 +71,7 @@ export function VncViewer({ agentId }: VncViewerProps) {
       <div className='flex justify-center items-center flex-col gap-2'>
         <p>Failed to load VNC viewer: {error}</p>
       </div>
-      );
+    );
   }
 
   console.log('Connecting to VNC at:', vncUrl);
