@@ -7,7 +7,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { X } from "lucide-react"
-import { VncViewer } from '@/components/VncViewer';
+import VieweAgent from "./components/view-agent/view-agent";
 
 interface Agent {
   type: 'jim' | 'pam';
@@ -53,7 +53,7 @@ function App() {
 
   const renderCard = () => {
     if (step === null) return null;
-    
+
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <Card className="w-[400px] relative">
@@ -112,27 +112,13 @@ function App() {
 
   const renderMainContent = () => (
     <div className="flex h-screen w-screen">
-      <AppSidebar 
-        agents={agents} 
+      <AppSidebar
+        agents={agents}
         onNewAgentClick={handleNewAgentClick}
         selectedAgentId={selectedAgentId}
         onAgentSelect={handleAgentSelect}
       />
-      <main className="flex-grow flex flex-col relative">
-        <SidebarTrigger />
-        <div className="flex items-center justify-center h-screen">
-          {selectedAgentId ? (
-            <div className="w-full h-full p-4 flex justify-center items-center">
-              <VncViewer agentId={selectedAgentId} />
-            </div>
-          ) : (
-            <div className="flex justify-center items-center w-full h-full">
-              <p className='text-slate-900'>Select an agent to view their environment</p>
-            </div>
-          )}
-        </div>
-        <RightSidebarTrigger />
-      </main>
+      <VieweAgent selectedAgentId={selectedAgentId} />
       <RightSidebar />
     </div>
   );

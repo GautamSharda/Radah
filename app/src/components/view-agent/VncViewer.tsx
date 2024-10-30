@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { core } from '@tauri-apps/api';
+import { MessageInput } from './MessageInput';
 
 interface VncViewerProps {
   agentId: string;
@@ -18,17 +19,17 @@ export function VncViewer({ agentId }: VncViewerProps) {
 
   useEffect(() => {
     let mounted = true;
-    
+
     async function initContainer() {
       try {
         // Try to get existing container
         let containerInfo = await core.invoke<DockerContainer | null>('get_agent_container', { agentId });
-        
+
         // If no container exists and component is still mounted, create one
         if (!containerInfo && mounted) {
           containerInfo = await core.invoke<DockerContainer>('create_agent_container', { agentId });
         }
-        
+
         if (mounted) {
           setContainer(containerInfo);
           setError(null);
@@ -62,14 +63,24 @@ export function VncViewer({ agentId }: VncViewerProps) {
 
   // Just use localhost:6080 since we know that's the noVNC port
   const vncUrl = "http://localhost:6080";
-  
+
   console.log('Connecting to VNC at:', vncUrl);
 
   return (
-    <div className="h-full w-full">
-      <iframe
-        src={vncUrl}
+    <>
+
+      <div className="w-full aspect-w-16 aspect-h-9">
+        <iframe
+          src={vncUrl}
+        />
+      </div>
+      <MessageInput
+        sendMessage={() => { }}
+        promptRunning="false"
+        currentAgentID={agentId}
+        stopAgent={() => { }}
+        agentConnection={true}
       />
-    </div>
+    </>
   );
 } 

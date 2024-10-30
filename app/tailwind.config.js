@@ -21,5 +21,8 @@ export default {
 			},
 		},
 	},
-	plugins: [require("tailwindcss-animate")], // Keep this for shadcn animations
+	plugins: [
+		require("tailwindcss-animate"),
+		require('@tailwindcss/aspect-ratio')
+	], // Keep this for shadcn animations
 }

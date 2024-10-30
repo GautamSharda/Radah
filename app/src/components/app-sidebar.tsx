@@ -31,9 +31,9 @@ export function AppSidebar({ agents, onNewAgentClick, selectedAgentId, onAgentSe
             {agents.map((agent, index) => {
               const agentId = `${agent.type}-${agent.number}`;
               return (
-                <Button 
+                <Button
                   key={index}
-                  className="w-full justify-start mb-2" 
+                  className="w-full justify-start mb-2"
                   variant={selectedAgentId === agentId ? "default" : "secondary"}
                   onClick={() => onAgentSelect(agentId)}
                 >
