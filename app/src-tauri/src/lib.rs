@@ -121,28 +121,25 @@ fn get_available_ports(num_ports: u16) -> Result<Vec<u16>, String> {
     let mut available_ports = Vec::new();
     
     // Check VNC ports starting at 5900
-    for offset in 0..num_ports {
+    for offset in 0..100 {  // Increased range to check more ports
         let port = 5900 + offset;
         if !is_port_in_use(port) {
             available_ports.push(port);
-            break;
-        }
-    }
-    
-    // Check noVNC ports starting at 6080
-    for offset in 0..num_ports {
-        let port = 6080 + offset;
-        if !is_port_in_use(port) {
-            available_ports.push(port);
-            break;
+            // Don't break - keep looking for more ports
+            if available_ports.len() == 1 {
+                // Found VNC port, now look for noVNC port
+                for novnc_offset in 0..100 {  // Increased range for noVNC ports too
+                    let novnc_port = 6080 + novnc_offset;
+                    if !is_port_in_use(novnc_port) {
+                        available_ports.push(novnc_port);
+                        return Ok(available_ports);  // Found both ports, return them
+                    }
+                }
+            }
         }
     }
 
-    if available_ports.len() < 2 {
-        return Err("Not enough available ports".to_string());
-    }
-
-    Ok(available_ports)
+    Err("Not enough available ports".to_string())
 }
 
 #[tauri::command]
@@ -151,9 +148,19 @@ async fn create_agent_container(agent_id: String) -> Result<DockerContainer, Str
     let vnc_port = ports[0];
     let novnc_port = ports[1];
 
-    println!("Building Docker image...");
+    // First check if Docker daemon is running
+    let docker_check = Command::new("docker")
+        .args(&["info"])
+        .output()
+        .map_err(|e| format!("Failed to check Docker status: {}. Is Docker running?", e))?;
+
+    if !docker_check.status.success() {
+        return Err("Docker daemon is not running. Please start Docker first.".to_string());
+    }
+
+    println!("Building Docker image for agent {} ...", agent_id);
     
-    // Build the Docker image
+    // Build the Docker image with better error handling
     let build_output = Command::new("docker")
         .args(&[
             "build",
@@ -162,11 +169,12 @@ async fn create_agent_container(agent_id: String) -> Result<DockerContainer, Str
             env!("CARGO_MANIFEST_DIR"),  // This gets the directory containing Cargo.toml
         ])
         .output()
-        .map_err(|e| format!("Failed to build Docker image: {}", e))?;
+        .map_err(|e| format!("Failed to execute docker build command: {}", e))?;
 
     if !build_output.status.success() {
-        let error = String::from_utf8_lossy(&build_output.stderr);
-        return Err(format!("Failed to build Docker image: {}", error));
+        let stderr = String::from_utf8_lossy(&build_output.stderr);
+        let stdout = String::from_utf8_lossy(&build_output.stdout);
+        return Err(format!("Docker build failed.\nStderr: {}\nStdout: {}", stderr, stdout));
     }
 
     println!("Starting Docker container for agent {} with VNC port {} and noVNC port {}", 
