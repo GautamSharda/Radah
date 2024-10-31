@@ -1,4 +1,6 @@
 import * as React from "react";
+import { useEffect, useState } from "react";
+import { core } from '@tauri-apps/api';
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { RightSidebar, RightSidebarProvider, RightSidebarTrigger } from "@/components/right-sidebar"
@@ -14,12 +16,33 @@ interface Agent {
   number: number;
 }
 
-function App() {
+export default function App() {
   const [step, setStep] = React.useState<number | null>(0);
   const [selectedAssistant, setSelectedAssistant] = React.useState<string | null>(null);
   const [agents, setAgents] = React.useState<Agent[]>([]);
   const [isCreatingNewAgent, setIsCreatingNewAgent] = React.useState(false);
   const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(null);
+
+  useEffect(() => {
+    // Load existing containers when app starts
+    async function loadExistingAgents() {
+      try {
+        const containers = await core.invoke('get_all_containers');
+        const loadedAgents = containers.map(container => {
+          const [type, numberStr] = container.agent_id.split('-');
+          return {
+            type: type as 'jim' | 'pam',
+            number: parseInt(numberStr)
+          };
+        });
+        setAgents(loadedAgents);
+      } catch (error) {
+        console.error('Failed to load existing agents:', error);
+      }
+    }
+
+    loadExistingAgents();
+  }, []);
 
   const handleAssistantSelect = (value: string) => {
     setSelectedAssistant(value);
@@ -132,5 +155,3 @@ function App() {
     </SidebarProvider>
   )
 }
-
-export default App;

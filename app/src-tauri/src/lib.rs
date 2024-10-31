@@ -1,7 +1,12 @@
 use std::process::Command;
 use std::env;
 use std::sync::Mutex;
+use std::fs;
+use std::path::PathBuf;
 use once_cell::sync::Lazy;
+use serde::{Serialize, Deserialize};
+use tauri::Manager;
+use tauri::Runtime;
 
 static OCCUPIED_PORTS: Lazy<Mutex<Vec<u16>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
@@ -108,43 +113,59 @@ fn build_and_run_docker() -> Result<(), String> {
     Ok(())
 }
 
-#[derive(serde::Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 struct DockerContainer {
     id: String,
     vnc_port: u16,
     agent_id: String,
 }
 
-static DOCKER_CONTAINERS: Lazy<Mutex<Vec<DockerContainer>>> = Lazy::new(|| Mutex::new(Vec::new()));
+static DOCKER_CONTAINERS: Lazy<Mutex<Vec<DockerContainer>>> = Lazy::new(|| {
+    Mutex::new(Vec::new())
+});
 
-fn get_available_ports(num_ports: u16) -> Result<Vec<u16>, String> {
-    let mut available_ports = Vec::new();
+fn get_containers_file<R: Runtime>(app: &tauri::AppHandle<R>) -> PathBuf {
+    app.path().app_data_dir()
+        .expect("Failed to get app data dir")
+        .join("containers.json")
+}
+
+fn save_containers<R: Runtime>(app: &tauri::AppHandle<R>, containers: &[DockerContainer]) -> Result<(), String> {
+    let file_path = get_containers_file(app);
     
-    // Check VNC ports starting at 5900
-    for offset in 0..100 {  // Increased range to check more ports
-        let port = 5900 + offset;
-        if !is_port_in_use(port) {
-            available_ports.push(port);
-            // Don't break - keep looking for more ports
-            if available_ports.len() == 1 {
-                // Found VNC port, now look for noVNC port
-                for novnc_offset in 0..100 {  // Increased range for noVNC ports too
-                    let novnc_port = 6080 + novnc_offset;
-                    if !is_port_in_use(novnc_port) {
-                        available_ports.push(novnc_port);
-                        return Ok(available_ports);  // Found both ports, return them
-                    }
-                }
-            }
-        }
+    // Ensure directory exists
+    if let Some(dir) = file_path.parent() {
+        fs::create_dir_all(dir)
+            .map_err(|e| format!("Failed to create directory: {}", e))?;
     }
 
-    Err("Not enough available ports".to_string())
+    fs::write(
+        &file_path,
+        serde_json::to_string_pretty(containers)
+            .map_err(|e| format!("Failed to serialize containers: {}", e))?
+    )
+    .map_err(|e| format!("Failed to write containers file: {}", e))?;
+
+    Ok(())
+}
+
+fn load_containers<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<Vec<DockerContainer>, String> {
+    let file_path = get_containers_file(app);
+    
+    if !file_path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let contents = fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read containers file: {}", e))?;
+
+    serde_json::from_str(&contents)
+        .map_err(|e| format!("Failed to parse containers file: {}", e))
 }
 
 #[tauri::command]
-async fn create_agent_container(agent_id: String) -> Result<DockerContainer, String> {
-    let ports = get_available_ports(2)?;
+async fn create_agent_container(app_handle: tauri::AppHandle, agent_id: String) -> Result<DockerContainer, String> {
+    let ports = get_available_ports()?;
     let vnc_port = ports[0];
     let novnc_port = ports[1];
 
@@ -212,6 +233,9 @@ async fn create_agent_container(agent_id: String) -> Result<DockerContainer, Str
 
     let mut containers = DOCKER_CONTAINERS.lock().unwrap();
     containers.push(container.clone());
+    
+    // Save containers after adding new one
+    save_containers(&app_handle, &containers)?;
 
     Ok(container)
 }
@@ -233,30 +257,71 @@ fn get_occupied_ports() -> Vec<u16> {
 }
 
 #[tauri::command]
-async fn cleanup_agent_container(agent_id: String) -> Result<(), String> {
+async fn cleanup_agent_container(app_handle: tauri::AppHandle, agent_id: String) -> Result<(), String> {
     let mut containers = DOCKER_CONTAINERS.lock().unwrap();
     if let Some(pos) = containers.iter().position(|c| c.agent_id == agent_id) {
         let container = containers.remove(pos);
         
-        // Stop and remove the container
         Command::new("docker")
             .args(&["rm", "-f", &container.id])
             .output()
             .map_err(|e| e.to_string())?;
+            
+        save_containers(&app_handle, &containers)?;
     }
     Ok(())
+}
+
+#[tauri::command]
+fn get_all_containers() -> Vec<DockerContainer> {
+    let containers = DOCKER_CONTAINERS.lock().unwrap();
+    containers.clone()
+}
+
+fn get_available_ports() -> Result<Vec<u16>, String> {
+    let mut available_ports = Vec::new();
+    
+    // Check VNC ports starting at 5900
+    for offset in 0..100 {  // Increased range to check more ports
+        let port = 5900 + offset;
+        if !is_port_in_use(port) {
+            available_ports.push(port);
+            // Don't break - keep looking for more ports
+            if available_ports.len() == 1 {
+                // Found VNC port, now look for noVNC port
+                for novnc_offset in 0..100 {  // Increased range for noVNC ports too
+                    let novnc_port = 6080 + novnc_offset;
+                    if !is_port_in_use(novnc_port) {
+                        available_ports.push(novnc_port);
+                        return Ok(available_ports);  // Found both ports, return them
+                    }
+                }
+            }
+        }
+    }
+
+    Err("Not enough available ports".to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            // Load containers on startup
+            if let Ok(containers) = load_containers(&app.handle()) {
+                let mut stored_containers = DOCKER_CONTAINERS.lock().unwrap();
+                *stored_containers = containers;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             get_occupied_ports,
             create_agent_container,
             get_agent_container,
-            cleanup_agent_container
+            cleanup_agent_container,
+            get_all_containers
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
