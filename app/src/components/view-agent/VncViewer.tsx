@@ -17,38 +17,52 @@ export function VncViewer({ agentId }: VncViewerProps) {
   const [container, setContainer] = useState<DockerContainer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [switching, setSwitching] = useState(false);
 
-  // Just use localhost:6080 since we know that's the noVNC port (if you want to test if it's being cached just add a unique query param e.g. date so it won't be cached)
-  const vncUrl = 'http://localhost:6080';
+  // Add unique session parameters for each agent
+  const getVncUrl = (port: number) => {
+    const params = new URLSearchParams({
+      view_only: '1',
+      autoconnect: '1',
+      resize: 'scale',
+      reconnect: '1',
+      reconnect_delay: '2000',
+      session: agentId
+    });
+    return `http://localhost:${port}/vnc.html?${params.toString()}`;
+  };
 
   useEffect(() => {
+    // Set switching to true whenever agentId changes
+    setSwitching(true);
     let mounted = true;
 
     async function initContainer() {
-        try {
-          // Try to get existing container
-          let containerInfo = await core.invoke<DockerContainer | null>('get_agent_container', { agentId });
+      try {
+        // Try to get existing container
+        let containerInfo = await core.invoke<DockerContainer | null>('get_agent_container', { agentId });
 
-          // If no container exists and component is still mounted, create one
-          if (!containerInfo && mounted) {
-            containerInfo = await core.invoke<DockerContainer>('create_agent_container', { agentId });
-          }
+        // If no container exists and component is still mounted, create one
+        if (!containerInfo && mounted) {
+          containerInfo = await core.invoke<DockerContainer>('create_agent_container', { agentId });
+        }
 
-          await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
-          if (mounted) {
-            setContainer(containerInfo);
-            setError(null);
-          }
-        } catch (error) {
-          console.error('Failed to initialize container:', error);
-          if (mounted) {
-            setError('Failed to initialize container');
-          }
-        } finally {
-          if (mounted) {
-            setLoading(false);
-          }
+        if (mounted) {
+          setContainer(containerInfo);
+          setError(null);
+        }
+      } catch (error) {
+        console.error('Failed to initialize container:', error);
+        if (mounted) {
+          setError('Failed to initialize container');
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+          setSwitching(false); // Reset switching state when done
+        }
       }
     }
 
@@ -59,10 +73,10 @@ export function VncViewer({ agentId }: VncViewerProps) {
     };
   }, [agentId]);
 
-  if (loading) {
+  if (loading || switching) {
     return (
       <div className='flex justify-center items-center flex-col gap-2'>
-        <p>Loading VNC viewer...</p>
+        <p>{loading ? 'Loading VNC viewer...' : 'Switching agents...'}</p>
         <Spinner size="medium"/>
       </div>
     );
@@ -73,17 +87,16 @@ export function VncViewer({ agentId }: VncViewerProps) {
       <div className='flex justify-center items-center flex-col gap-2'>
         <p>Failed to load VNC viewer: {error}</p>
       </div>
-      );
+    );
   }
 
-  console.log('Connecting to VNC at:', vncUrl);
+  console.log('Connecting to VNC at:', container ? getVncUrl(container.vnc_port) : 'unknown');
 
   return (
     <>
-
       <div className="w-full aspect-w-16 aspect-h-9">
         <iframe
-          src={vncUrl}
+          src={getVncUrl(container.vnc_port)}
         />
       </div>
       <MessageInput
