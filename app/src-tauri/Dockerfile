@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y \
     supervisor \
     net-tools \
     git \
+    python3-pip \
+    python3-tk \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -34,11 +36,17 @@ RUN git clone --branch v1.5.0 https://github.com/novnc/noVNC.git /opt/noVNC && \
     ln -s /opt/noVNC/vnc.html /opt/noVNC/index.html && \
     chown -R vncuser:vncuser /opt/noVNC
 
-# Copy startup scripts
+# Copy all files from image directory and startup scripts
+COPY image/ /
 COPY startup.sh /startup.sh
 COPY novnc_startup.sh /novnc_startup.sh
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-RUN chmod +x /startup.sh /novnc_startup.sh
+
+# Create empty init.py
+RUN touch /init.py
+
+# Set execute permissions
+RUN chmod +x /startup.sh /novnc_startup.sh /init.py
 
 # Create directory for logs and set permissions
 RUN mkdir -p /var/log/supervisor && \
@@ -50,8 +58,16 @@ RUN mkdir -p /var/log/supervisor && \
     chmod 755 /var/log/supervisor && \
     chmod 644 /var/log/supervisor/*.log /var/log/supervisor/*.err
 
+# Install only the required Python packages
+RUN pip3 install \
+    anthropic \
+    httpx \
+    pyautogui \
+    pillow \
+    python-dotenv
+
 # Expose ports
 EXPOSE 5900
 EXPOSE 6080
 
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"] 
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
