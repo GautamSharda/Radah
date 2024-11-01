@@ -1,0 +1,5 @@
+anthropic>=0.18.1
+python-dotenv
+httpx
+pyautogui
+pillow
