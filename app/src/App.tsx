@@ -16,18 +16,35 @@ interface Agent {
   number: number;
 }
 
+export interface User {
+  show_controls: boolean;
+}
+
 export default function App() {
   const [step, setStep] = React.useState<number | null>(0);
   const [selectedAssistant, setSelectedAssistant] = React.useState<string | null>(null);
   const [agents, setAgents] = React.useState<Agent[]>([]);
+  const [user, setUser] = React.useState<User | undefined>(undefined);
   const [isCreatingNewAgent, setIsCreatingNewAgent] = React.useState(false);
   const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(null);
+
+  useEffect(() => {
+    async function getUser() {
+      try {
+        const user = await core.invoke<User>('get_user_data');
+        setUser(user);
+      } catch (error) {
+        console.error('Failed to get user:', error);
+      }
+    }
+    getUser();
+  }, []);
 
   useEffect(() => {
     // Load existing containers when app starts
     async function loadExistingAgents() {
       try {
-        const containers = await core.invoke('get_all_containers');
+        const containers = await core.invoke<any[]>('get_all_containers');
         const loadedAgents = containers.map(container => {
           const [type, numberStr] = container.agent_id.split('-');
           return {
@@ -140,8 +157,10 @@ export default function App() {
         onNewAgentClick={handleNewAgentClick}
         selectedAgentId={selectedAgentId}
         onAgentSelect={handleAgentSelect}
+        user={user}
+        setUser={setUser}
       />
-      <VieweAgent selectedAgentId={selectedAgentId} />
+      <VieweAgent selectedAgentId={selectedAgentId} showControls={user ? user.show_controls : false} />
       <RightSidebar />
     </div>
   );

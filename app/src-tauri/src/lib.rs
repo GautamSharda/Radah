@@ -303,6 +303,31 @@ fn get_available_ports() -> Result<Vec<u16>, String> {
     Err("Not enough available ports".to_string())
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+struct User {
+    //boolean value to hide or show computer controls
+    show_controls: bool,
+}
+
+static USER: Lazy<Mutex<User>> = Lazy::new(|| Mutex::new(User { show_controls: true }));
+
+
+//read all user data
+#[tauri::command]
+fn get_user_data() -> User {
+    let user = USER.lock().unwrap();
+    user.clone()
+}
+
+//update user data
+#[tauri::command]
+fn update_user_data(show_controls: bool) {
+    let mut user = USER.lock().unwrap();
+    user.show_controls = show_controls;
+}
+
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -321,7 +346,9 @@ pub fn run() {
             create_agent_container,
             get_agent_container,
             cleanup_agent_container,
-            get_all_containers
+            get_all_containers,
+            get_user_data,
+            update_user_data
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
