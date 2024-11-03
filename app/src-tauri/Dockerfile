@@ -3,7 +3,7 @@ FROM ubuntu:22.04
 # Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install minimal desktop environment and VNC server
+# Install minimal desktop environment, VNC server, and firefox
 RUN apt-get update && apt-get install -y \
     xfce4 \
     xfce4-terminal \
@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     git \
     python3-pip \
     python3-tk \
+    firefox \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
