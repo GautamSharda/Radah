@@ -13,12 +13,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Switch } from "./ui/switch";
 import { User } from "@/App";
+import { Agent } from "@/App";
 import { core } from "@tauri-apps/api";
-
-interface Agent {
-  type: 'jim' | 'pam';
-  number: number;
-}
 
 interface AppSidebarProps {
   agents: Agent[];
@@ -44,7 +40,7 @@ export function AppSidebar({ agents, onNewAgentClick, selectedAgentId, onAgentSe
           <SidebarGroupLabel className="text-lg font-semibold mb-4 text-black">Agents</SidebarGroupLabel>
           <SidebarGroupContent>
             {agents.map((agent, index) => {
-              const agentId = `${agent.type}-${agent.number}`;
+              const agentId = agent.agent_id;
               return (
                 <Button
                   key={index}
@@ -52,7 +48,7 @@ export function AppSidebar({ agents, onNewAgentClick, selectedAgentId, onAgentSe
                   variant={selectedAgentId === agentId ? "default" : "secondary"}
                   onClick={() => onAgentSelect(agentId)}
                 >
-                  {agent.type === 'jim' ? (
+                  {agent.agent_type === 'jim' ? (
                     <>
                       <Briefcase className="mr-2 h-4 w-4" />
                       J.I.M {agent.number}

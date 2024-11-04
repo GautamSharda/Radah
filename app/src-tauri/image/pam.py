@@ -6,6 +6,7 @@ import platform
 from collections.abc import Callable
 from datetime import datetime
 import enum
+import json
 from typing import Any, cast
 import dotenv
 dotenv.load_dotenv()
@@ -31,8 +32,8 @@ from anthropic.types.beta import (
     BetaToolResultBlockParam,
     BetaToolUseBlockParam,
 )
-
-from .tools import BashTool, ComputerTool, EditTool, ToolCollection, ToolResult
+from collections import deque
+from tools import BashTool, ComputerTool, EditTool, ToolCollection, ToolResult
 
 COMPUTER_USE_BETA_FLAG = "computer-use-2024-10-22"
 PROMPT_CACHING_BETA_FLAG = "prompt-caching-2024-07-31"
@@ -318,7 +319,8 @@ def _maybe_prepend_system_tool_result(result: ToolResult, result_text: str):
         result_text = f"<system>{result.system}</system>\n{result_text}"
     return result_text
 
-async def main():  # Need to make this async since sampling_loop is async
+async def run_pam(message_queue = deque()):  # Need to make this async since sampling_loop is async
+    print("run_pam")
     # Get screen dimensions using tkinter
     root = tk.Tk()
     width = root.winfo_screenwidth()
@@ -341,7 +343,8 @@ async def main():  # Need to make this async since sampling_loop is async
                 for item in print_block["content"]:
                     if isinstance(item, dict) and item.get("type") == "image":
                         item["source"]["data"] = "<base64_image_data_omitted>"
-        
+
+        message_queue.append(json.dumps(print_block))
         print(f"Content: {print_block}")
     
     def tool_output_callback(result: ToolResult, tool_id: str) -> None:
@@ -370,6 +373,8 @@ async def main():  # Need to make this async since sampling_loop is async
         api_key=os.getenv("ANTHROPIC_API_KEY")
     )
 
+
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
+    asyncio.run(run_pam())
+

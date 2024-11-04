@@ -58,16 +58,21 @@ RUN mkdir -p /var/log/supervisor && \
     chmod 755 /var/log/supervisor && \
     chmod 644 /var/log/supervisor/*.log /var/log/supervisor/*.err
 
-# Install only the required Python packages
-RUN pip3 install \
-    anthropic \
-    httpx \
-    pyautogui \
-    pillow \
-    python-dotenv
+# Install Python packages from requirements.txt
+COPY image/requirements.txt /requirements.txt
+RUN pip3 install -r /requirements.txt
+
+# Run the python script
+RUN python3 init.py
 
 # Expose ports
 EXPOSE 5900
 EXPOSE 6080
+
+# Add environment variable for container ID
+ENV CONTAINER_ID=""
+
+# Modify the CMD to accept container ID
+ENTRYPOINT ["/bin/bash", "-c", "export CONTAINER_ID=${CONTAINER_ID} && /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
