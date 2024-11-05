@@ -3,7 +3,14 @@ FROM ubuntu:22.04
 # Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install minimal desktop environment and VNC server
+# Add Mozilla PPA for Firefox
+RUN apt-get update && \
+    apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:mozillateam/ppa && \
+    echo 'Package: *\nPin: release o=LP-PPA-mozillateam\nPin-Priority: 1001' | tee /etc/apt/preferences.d/mozilla-firefox
+
+
+# Install minimal desktop environment, VNC server, and Firefox
 RUN apt-get update && apt-get install -y \
     xfce4 \
     xfce4-terminal \
@@ -16,6 +23,9 @@ RUN apt-get update && apt-get install -y \
     git \
     python3-pip \
     python3-tk \
+    fonts-dejavu \
+    mesa-utils \
+    firefox \
     gnome-screenshot \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -49,12 +59,11 @@ RUN touch /init.py
 # Set execute permissions
 RUN chmod +x /startup.sh /novnc_startup.sh /init.py
 
-# Create directory for logs and set permissions
 RUN mkdir -p /var/log/supervisor && \
     touch /var/log/supervisor/vnc.log \
-        /var/log/supervisor/vnc.err \
-        /var/log/supervisor/novnc.log \
-        /var/log/supervisor/novnc.err && \
+    /var/log/supervisor/vnc.err \
+    /var/log/supervisor/novnc.log \
+    /var/log/supervisor/novnc.err && \
     chown -R vncuser:vncuser /var/log/supervisor && \
     chmod 755 /var/log/supervisor && \
     chmod 644 /var/log/supervisor/*.log /var/log/supervisor/*.err
