@@ -6,6 +6,7 @@ import platform
 from collections.abc import Callable
 from datetime import datetime
 import enum
+import json
 from typing import Any, cast
 import dotenv
 dotenv.load_dotenv()
@@ -31,14 +32,15 @@ from anthropic.types.beta import (
     BetaToolResultBlockParam,
     BetaToolUseBlockParam,
 )
+from collections import deque
+from tools import BashTool, ComputerTool, EditTool, ToolCollection, ToolResult
 
-from .tools import BashTool, ComputerTool, EditTool, ToolCollection, ToolResult
 
 COMPUTER_USE_BETA_FLAG = "computer-use-2024-10-22"
 PROMPT_CACHING_BETA_FLAG = "prompt-caching-2024-07-31"
 
 
-class APIProvider(enum.StrEnum):
+class APIProvider(str, enum.Enum):
     ANTHROPIC = "anthropic"
     BEDROCK = "bedrock"
     VERTEX = "vertex"
@@ -318,12 +320,15 @@ def _maybe_prepend_system_tool_result(result: ToolResult, result_text: str):
         result_text = f"<system>{result.system}</system>\n{result_text}"
     return result_text
 
-async def main():  # Need to make this async since sampling_loop is async
+async def run_pam(message_queue = deque(), prompt: str = ""):  # Need to make this async since sampling_loop is async
+    print("run_pam")
+    messages = [{"role": "user", "content": prompt}]
     # Get screen dimensions using tkinter
     root = tk.Tk()
     width = root.winfo_screenwidth()
     height = root.winfo_screenheight()
     root.destroy()
+
 
     # Set them in environment for ComputerTool
     os.environ["WIDTH"] = str(width)
@@ -341,8 +346,12 @@ async def main():  # Need to make this async since sampling_loop is async
                 for item in print_block["content"]:
                     if isinstance(item, dict) and item.get("type") == "image":
                         item["source"]["data"] = "<base64_image_data_omitted>"
-        
+
         print(f"Content: {print_block}")
+
+        #this is needed for the websocket server to know what to do with the message
+        print_block["message-type"] = "message"
+        message_queue.append(print_block)
     
     def tool_output_callback(result: ToolResult, tool_id: str) -> None:
         # Create a copy of the result for printing
@@ -363,13 +372,15 @@ async def main():  # Need to make this async since sampling_loop is async
         model="claude-3-5-sonnet-20241022",
         provider=APIProvider.ANTHROPIC,
         system_prompt_suffix="",
-        messages=[{"role": "user", "content": "Open Safari using spotlight search. ONLY TAKE ONE ACTION / TOOL USE PER RESPONSE. DO NOT SEND A BUNCH OF ACTIONS AT ONCE."}],
+        messages=messages,
         output_callback=output_callback,
         tool_output_callback=tool_output_callback,
         api_response_callback=api_response_callback,
         api_key=os.getenv("ANTHROPIC_API_KEY")
     )
 
+
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
+    asyncio.run(run_pam(deque(), "Open Safari using spotlight search. ONLY TAKE ONE ACTION / TOOL USE PER RESPONSE. DO NOT SEND A BUNCH OF ACTIONS AT ONCE."))
+

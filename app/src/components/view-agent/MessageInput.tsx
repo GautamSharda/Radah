@@ -5,18 +5,19 @@ import { ReloadIcon } from "@radix-ui/react-icons";
 import { promptRunningType } from "./view-agent";
 
 interface MessageInputInterface {
-    sendMessage: (message: Object) => void;
+    sendMessage: (message: string) => void;
     promptRunning: promptRunningType;
     currentAgentID: string | undefined;
     stopAgent: () => void;
-    agentConnection: boolean;
 }
 
 
-export function MessageInput({ sendMessage, promptRunning, currentAgentID, stopAgent, agentConnection }: MessageInputInterface) {
+export function MessageInput({ sendMessage, promptRunning, currentAgentID, stopAgent }: MessageInputInterface) {
     const [prompt, setPrompt] = useState<string>("");
     const sendMessageWrapper = () => {
-        sendMessage({ message: prompt });
+        const message = { "message-type": "prompt", "text": prompt, "agent_id": currentAgentID };
+        console.log(message);
+        sendMessage(JSON.stringify(message));
         setPrompt("");
     }
 
@@ -25,7 +26,6 @@ export function MessageInput({ sendMessage, promptRunning, currentAgentID, stopA
         setPrompt("");
     }, [currentAgentID])
 
-    if (!agentConnection) return <></>
     return (
         <div className='flex flex-row items-start justify-start mt-8 w-full'>
             <Input type="text" value={prompt} onChange={(e) => { setPrompt(e.target.value) }} placeholder="Prompt" className='w-ful text-md h-12 ' />

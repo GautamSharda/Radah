@@ -1,19 +1,28 @@
-import { RightSidebarTrigger } from "../right-sidebar";
+import { Agent } from "@/App";
+import { RightSidebarTrigger } from "../RightSidebar";
 import { SidebarTrigger } from "../ui/sidebar";
 import { VncViewer } from "./VncViewer";
 
 
 export type promptRunningType = "true" | "false" | "loading";
 
-export default function VieweAgent({ selectedAgentId, showControls }: { selectedAgentId: string | null, showControls: boolean }) {
+
+interface ViewAgentProps {
+    showControls: boolean;
+    sendMessage: (message: string) => void;
+    agent: Agent | undefined;
+}
+
+
+export default function ViewAgent({ showControls, sendMessage, agent }: ViewAgentProps) {
     return (
         <main className="flex-grow flex flex-col relative h-screen p-4">
             <SidebarTrigger />
             <h3 className="w-full text-center text-4xl font-bold font-mono text-slate-900 my-8">
                 Your Agent
             </h3>
-            {selectedAgentId ? (
-                <VncViewer agentId={selectedAgentId} showControls={showControls} />
+            {agent ? (
+                <VncViewer showControls={showControls} sendMessage={sendMessage} agent={agent} />
             ) : (
                 <div className="flex justify-center items-center w-full h-full">
                     <p className='text-slate-900'>Select an agent to view their environment</p>

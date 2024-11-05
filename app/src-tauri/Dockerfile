@@ -9,6 +9,7 @@ RUN apt-get update && \
     add-apt-repository -y ppa:mozillateam/ppa && \
     echo 'Package: *\nPin: release o=LP-PPA-mozillateam\nPin-Priority: 1001' | tee /etc/apt/preferences.d/mozilla-firefox
 
+
 # Install minimal desktop environment, VNC server, and Firefox
 RUN apt-get update && apt-get install -y \
     xfce4 \
@@ -25,6 +26,7 @@ RUN apt-get update && apt-get install -y \
     fonts-dejavu \
     mesa-utils \
     firefox \
+    gnome-screenshot \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -57,7 +59,6 @@ RUN touch /init.py
 # Set execute permissions
 RUN chmod +x /startup.sh /novnc_startup.sh /init.py
 
-# Create directory for logs and set permissions
 RUN mkdir -p /var/log/supervisor && \
     touch /var/log/supervisor/vnc.log \
     /var/log/supervisor/vnc.err \
@@ -67,16 +68,24 @@ RUN mkdir -p /var/log/supervisor && \
     chmod 755 /var/log/supervisor && \
     chmod 644 /var/log/supervisor/*.log /var/log/supervisor/*.err
 
-# Install only the required Python packages
-RUN pip3 install \
-    anthropic \
-    httpx \
-    pyautogui \
-    pillow \
-    python-dotenv
+# Install Python packages from requirements.txt
+COPY image/requirements.txt /requirements.txt
+RUN pip3 install -r /requirements.txt
+
+# Run the python script
+RUN python3 init.py
 
 # Expose ports
 EXPOSE 5900
 EXPOSE 6080
+
+# Add environment variable for container ID
+ENV CONTAINER_ID=""
+
+# Add environment variable for host IP
+ENV HOST_IP="host.docker.internal"
+
+# Modify the CMD to accept container ID and host IP
+ENTRYPOINT ["/bin/bash", "-c", "export CONTAINER_ID=${CONTAINER_ID} && export HOST_IP=${HOST_IP} && /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
