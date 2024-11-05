@@ -118,21 +118,7 @@ async fn handle_websocket(websocket: warp::ws::WebSocket, app_handle: tauri::App
                 } else if let Some("message") = json.get("message-type").and_then(|v| v.as_str()) {
                     handle_agent_message(&conn_id, &tx, text, app_handle.clone()).await;
                 } else if let Some("prompt") = json.get("message-type").and_then(|v| v.as_str()) {
-                    if let (Some(agent_id), Some(_prompt)) = (
-                        json.get("agent_id").and_then(|v| v.as_str()),
-                        json.get("text").and_then(|v| v.as_str())
-                    ) {
-                        // Handle as agent message first
-                        println!("[INFO] Sending prompt to agent {}", agent_id);
-                        handle_agent_message(&conn_id, &tx, text, app_handle.clone()).await;
-                        
-                        let agent_conns = AGENT_CONNECTIONS.lock().await;
-                        if let Some(conn_info) = agent_conns.get(agent_id) {
-                            if let Err(e) = conn_info.tx.lock().await.send(warp::ws::Message::text(text)).await {
-                                eprintln!("Error forwarding prompt to agent {}: {}", agent_id, e);
-                            }
-                        }
-                    }
+                    handle_client_message(&conn_id, &tx, text, app_handle.clone()).await;
                 }
             }
         }
@@ -159,6 +145,34 @@ fn generate_random_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+// Helper function to handle common message processing logic
+async fn process_message(
+    message_id: String,
+    text: &str,
+    json_message: serde_json::Value,
+    agent_id: &str,
+    app_handle: &tauri::AppHandle,
+) {
+    // Send to client connection
+    if let Some(client_conn) = CLIENT_CONNECTION.lock().await.as_ref() {
+        println!("[INFO] Sending message to client");
+        let json_string = serde_json::to_string(&json_message).unwrap();
+        client_conn.lock().await.send(warp::ws::Message::text(json_string)).await.unwrap();
+    }
+
+    // Store message
+    let mut messages = MESSAGES.lock().unwrap();
+    messages.insert(message_id.clone(), text.to_string());
+    save_messages(&app_handle, &messages).unwrap();
+
+    // Update container message IDs
+    let mut containers = DOCKER_CONTAINERS.lock().unwrap();
+    if let Some(container) = containers.iter_mut().find(|c| c.agent_id == agent_id) {
+        container.message_ids.push(message_id);
+        save_containers(&app_handle, &containers).unwrap();
+    }
+}
+
 //Handle messages from agents
 async fn handle_agent_message(
     conn_id: &str,
@@ -180,23 +194,37 @@ async fn handle_agent_message(
                 map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
             }
 
-            //send the JSON object to the client
-            if let Some(client_conn) = CLIENT_CONNECTION.lock().await.as_ref() {
-                println!("[INFO] Sending message to client");
-                let json_string = serde_json::to_string(&json_message).unwrap();
-                client_conn.lock().await.send(warp::ws::Message::text(json_string)).await.unwrap();
+            process_message(message_id, text, json_message, &agent_id, &app_handle).await;
+        }
+    }
+}
+
+async fn handle_client_message(conn_id: &str, tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>, text: &str, app_handle: tauri::AppHandle) {
+    // Parse the text into JSON
+    if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(text) {
+        // Extract values early before modifying json
+        let agent_id = json.get("agent_id")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let has_prompt = json.get("text").is_some();
+
+        if let (Some(agent_id), true) = (agent_id, has_prompt) {
+            println!("[INFO] Sending prompt to agent {}", agent_id);
+            let agent_conns = AGENT_CONNECTIONS.lock().await;
+            if let Some(conn_info) = agent_conns.get(&agent_id) {
+                if let Err(e) = conn_info.tx.lock().await.send(warp::ws::Message::text(text)).await {
+                    eprintln!("Error forwarding prompt to agent {}: {}", agent_id, e);
+                }
+            }
+            
+            let message_id = generate_random_id();
+
+            // Add message_id to JSON
+            if let serde_json::Value::Object(ref mut map) = json {
+                map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
             }
 
-            let mut messages = MESSAGES.lock().unwrap();
-            messages.insert(message_id.clone(), text.to_string());
-
-            save_messages(&app_handle, &messages).unwrap();
-
-            let mut containers = DOCKER_CONTAINERS.lock().unwrap();
-            if let Some(container) = containers.iter_mut().find(|c| c.agent_id == agent_id) {
-                container.message_ids.push(message_id);
-                save_containers(&app_handle, &containers).unwrap();
-            }
+            process_message(message_id, text, json, &agent_id, &app_handle).await;
         }
     }
 }

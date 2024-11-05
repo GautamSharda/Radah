@@ -33,7 +33,7 @@ async def run_websocket_client(message_queue, agent_id):
     async def connect():
         nonlocal ws_connection
         retry_delay = 1  # Initial delay in seconds
-        max_delay = 60   # Maximum delay in seconds
+        max_delay = 12   # Maximum delay in seconds
         
         while True:
             try:
@@ -71,7 +71,7 @@ async def run_websocket_client(message_queue, agent_id):
                             print(f"Error running Pam: {e}")
                         finally:
                             IS_RUNNING_PROMPT = False
-                            message_queue.append({"message-type": "message", "text": "Agent Pam has finished running", "end_prompt": True})
+                            message_queue.append({"message-type": "message", "text": "Agent Pam has finished running", "end_message": True})
                             print("Pam finished")
 
                 except websockets.exceptions.ConnectionClosed:

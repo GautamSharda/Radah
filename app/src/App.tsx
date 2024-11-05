@@ -33,7 +33,7 @@ export type Agent = DockerContainer | BuildingContainer;
 
 export interface Message {
   error?: boolean;
-  end_prompt?: boolean;
+  end_message?: boolean;
   text: string;
   'message-type': 'message' | 'prompt';
   message_id: string;
