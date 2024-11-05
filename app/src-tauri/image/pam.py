@@ -35,11 +35,12 @@ from anthropic.types.beta import (
 from collections import deque
 from tools import BashTool, ComputerTool, EditTool, ToolCollection, ToolResult
 
+
 COMPUTER_USE_BETA_FLAG = "computer-use-2024-10-22"
 PROMPT_CACHING_BETA_FLAG = "prompt-caching-2024-07-31"
 
 
-class APIProvider(enum.StrEnum):
+class APIProvider(str, enum.Enum):
     ANTHROPIC = "anthropic"
     BEDROCK = "bedrock"
     VERTEX = "vertex"
@@ -85,7 +86,7 @@ SYSTEM_PROMPT = f"""<SYSTEM_CAPABILITY>
 </IMPORTANT>"""
 
 
-async def sampling_loop(
+async def pyt(
     *,
     model: str,
     provider: APIProvider,
@@ -326,6 +327,7 @@ async def run_pam(message_queue = deque()):  # Need to make this async since sam
     width = root.winfo_screenwidth()
     height = root.winfo_screenheight()
     root.destroy()
+
 
     # Set them in environment for ComputerTool
     os.environ["WIDTH"] = str(width)

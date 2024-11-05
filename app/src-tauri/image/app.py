@@ -11,6 +11,9 @@ HEARTBEAT = True
 # Global message queue
 message_queue = deque()
 
+# Get host IP from environment variable, fallback to localhost
+HOST_IP = os.getenv("HOST_IP", "localhost")
+
 async def main(agent_id):
     # Run both coroutines concurrently using asyncio.gather()
     await asyncio.gather(
@@ -29,8 +32,8 @@ async def run_websocket_client(message_queue, agent_id):
         
         while True:
             try:
-                ws_connection = await websockets.connect('ws://localhost:3030/ws')
-                print("Successfully connected to WebSocket server")
+                ws_connection = await websockets.connect(f'ws://{HOST_IP}:3030/ws')
+                print(f"Successfully connected to WebSocket server at {HOST_IP}")
                 # Send initial dummy message
                 message_queue.appendleft({"type": "agent", "container_id": agent_id, "message-type": "init"})
                 return ws_connection

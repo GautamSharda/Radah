@@ -39,7 +39,6 @@ export function VncViewer({ showControls, sendMessage, agent }: VncViewerProps) 
     );
   }
   const vncUrl = getVncUrl((agent as DockerContainer).vnc_port, !showControls, agent.agent_id);
-  console.log('Connecting to VNC at: ', vncUrl);
 
   return (
     <>

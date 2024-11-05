@@ -72,7 +72,10 @@ EXPOSE 6080
 # Add environment variable for container ID
 ENV CONTAINER_ID=""
 
-# Modify the CMD to accept container ID
-ENTRYPOINT ["/bin/bash", "-c", "export CONTAINER_ID=${CONTAINER_ID} && /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
+# Add environment variable for host IP
+ENV HOST_IP="host.docker.internal"
+
+# Modify the CMD to accept container ID and host IP
+ENTRYPOINT ["/bin/bash", "-c", "export CONTAINER_ID=${CONTAINER_ID} && export HOST_IP=${HOST_IP} && /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

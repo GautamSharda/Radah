@@ -1,12 +1,10 @@
 import asyncio
 import base64
 import os
-import shlex
-import shutil
-from enum import StrEnum
 from pathlib import Path
 from typing import Literal, TypedDict
 from uuid import uuid4
+import enum
 
 from anthropic.types.beta import BetaToolComputerUse20241022Param
 
@@ -50,7 +48,7 @@ MAX_SCALING_TARGETS: dict[str, Resolution] = {
 }
 
 
-class ScalingSource(StrEnum):
+class ScalingSource(str, enum.Enum):
     COMPUTER = "computer"
     API = "api"
 

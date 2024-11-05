@@ -113,7 +113,7 @@ async fn handle_websocket(websocket: warp::ws::WebSocket, app_handle: tauri::App
                                 let mut client_conn = CLIENT_CONNECTION.lock().await;
                                 *client_conn = Some(tx.clone());
                                 println!("Client connection initialized");
-                            }
+                            },
                             _ => println!("Unknown connection type: {}", conn_type)  // Add catch-all case
                         }
                     }
@@ -132,11 +132,6 @@ async fn handle_websocket(websocket: warp::ws::WebSocket, app_handle: tauri::App
                         }
                     }
                 }
-            }
-
-            if let Err(e) = tx.lock().await.send(warp::ws::Message::text(text)).await {
-                eprintln!("Error sending message: {}", e);
-                break;
             }
         }
     }
@@ -170,27 +165,32 @@ async fn handle_agent_message(
     app_handle: tauri::AppHandle,
 ) {
     if let Some(agent_id) = ID_BY_CONNECTION.lock().await.get(conn_id).cloned() {
-        println!("[INFO] Received message from agent {}", agent_id);
-
         let message_id = generate_random_id();
 
-        let mut messages = MESSAGES.lock().unwrap();
-        messages.insert(message_id.clone(), text.to_string());
+        // Parse the text into a JSON Value
+        if let Ok(mut json_message) = serde_json::from_str::<serde_json::Value>(text) {
+            // Add agent_id to the JSON object
+            if let serde_json::Value::Object(ref mut map) = json_message {
+                map.insert("agent_id".to_string(), serde_json::Value::String(agent_id.clone()));
+                map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
+            }
 
-        save_messages(&app_handle, &messages).unwrap();
+            //send the JSON object to the client
+            if let Some(client_conn) = CLIENT_CONNECTION.lock().await.as_ref() {
+                let json_string = serde_json::to_string(&json_message).unwrap();
+                client_conn.lock().await.send(warp::ws::Message::text(json_string)).await.unwrap();
+            }
 
-        
-        println!("[INFO] Stored message in MESSAGES map");
-        println!("[INFO] Message: {}", text.to_string());
+            let mut messages = MESSAGES.lock().unwrap();
+            messages.insert(message_id.clone(), text.to_string());
 
-        //read the message back out
-        let message = messages.get(&message_id).unwrap();
-        println!("[INFO] Message: {}", message);
+            save_messages(&app_handle, &messages).unwrap();
 
-        let mut containers = DOCKER_CONTAINERS.lock().unwrap();
-        if let Some(container) = containers.iter_mut().find(|c| c.agent_id == agent_id) {
-            container.message_ids.push(message_id);
-            save_containers(&app_handle, &containers).unwrap();
+            let mut containers = DOCKER_CONTAINERS.lock().unwrap();
+            if let Some(container) = containers.iter_mut().find(|c| c.agent_id == agent_id) {
+                container.message_ids.push(message_id);
+                save_containers(&app_handle, &containers).unwrap();
+            }
         }
     }
 }
@@ -336,9 +336,11 @@ async fn create_agent_container(app_handle: tauri::AppHandle, agent_id: String, 
             "-e", "DISPLAY=:0",
             "-e", &format!("CONTAINER_ID={}", agent_id),
             "-e", "GEOMETRY=1920x1080",
+            "-e", "HOST_IP=host.docker.internal",
             "-p", &format!("{}:5900", vnc_port),
             "-p", &format!("{}:6080", novnc_port),
             "--name", &format!("agent-{}", agent_id),
+            "--add-host=host.docker.internal:host-gateway",
             "minimal-vnc-desktop",
         ])
         .output()
@@ -506,6 +508,28 @@ fn get_agent_messages(agent_id: String) -> Vec<serde_json::Value> {
     messages_array
 }
 
+// Add this helper function to get messages file path
+fn get_messages_file<R: Runtime>(app: &tauri::AppHandle<R>) -> PathBuf {
+    app.path().app_data_dir()
+        .expect("Failed to get app data dir")
+        .join("messages.json")
+}
+
+// Add this function to load messages
+fn load_messages<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<std::collections::HashMap<String, String>, String> {
+    let file_path = get_messages_file(app);
+    
+    if !file_path.exists() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    let contents = fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read messages file: {}", e))?;
+
+    serde_json::from_str(&contents)
+        .map_err(|e| format!("Failed to parse messages file: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -518,6 +542,12 @@ pub fn run() {
             if let Ok(containers) = load_containers(&app.handle()) {
                 let mut stored_containers = DOCKER_CONTAINERS.lock().unwrap();
                 *stored_containers = containers;
+            }
+
+            // Add this: Load messages on startup
+            if let Ok(messages) = load_messages(&app.handle()) {
+                let mut stored_messages = MESSAGES.lock().unwrap();
+                *stored_messages = messages;
             }
 
             // Start the WebSocket server in an async task
