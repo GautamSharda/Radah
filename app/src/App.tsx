@@ -31,9 +31,13 @@ export interface BuildingContainer extends BaseContainer {
 
 export type Agent = DockerContainer | BuildingContainer;
 
-export type Message = {
+export interface Message {
+  error?: boolean;
+  end_prompt?: boolean;
+  text: string;
+  'message-type': 'message' | 'prompt';
   message_id: string;
-  agent_id: string;
+  agent_id?: string;
 };
 
 export default function App() {

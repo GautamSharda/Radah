@@ -86,7 +86,7 @@ SYSTEM_PROMPT = f"""<SYSTEM_CAPABILITY>
 </IMPORTANT>"""
 
 
-async def pyt(
+async def sampling_loop(
     *,
     model: str,
     provider: APIProvider,
@@ -320,8 +320,9 @@ def _maybe_prepend_system_tool_result(result: ToolResult, result_text: str):
         result_text = f"<system>{result.system}</system>\n{result_text}"
     return result_text
 
-async def run_pam(message_queue = deque()):  # Need to make this async since sampling_loop is async
+async def run_pam(message_queue = deque(), prompt: str = ""):  # Need to make this async since sampling_loop is async
     print("run_pam")
+    messages = [{"role": "user", "content": prompt}]
     # Get screen dimensions using tkinter
     root = tk.Tk()
     width = root.winfo_screenwidth()
@@ -346,8 +347,11 @@ async def run_pam(message_queue = deque()):  # Need to make this async since sam
                     if isinstance(item, dict) and item.get("type") == "image":
                         item["source"]["data"] = "<base64_image_data_omitted>"
 
-        message_queue.append(json.dumps(print_block))
         print(f"Content: {print_block}")
+
+        #this is needed for the websocket server to know what to do with the message
+        print_block["message-type"] = "message"
+        message_queue.append(print_block)
     
     def tool_output_callback(result: ToolResult, tool_id: str) -> None:
         # Create a copy of the result for printing
@@ -368,7 +372,7 @@ async def run_pam(message_queue = deque()):  # Need to make this async since sam
         model="claude-3-5-sonnet-20241022",
         provider=APIProvider.ANTHROPIC,
         system_prompt_suffix="",
-        messages=[{"role": "user", "content": "Open Safari using spotlight search. ONLY TAKE ONE ACTION / TOOL USE PER RESPONSE. DO NOT SEND A BUNCH OF ACTIONS AT ONCE."}],
+        messages=messages,
         output_callback=output_callback,
         tool_output_callback=tool_output_callback,
         api_response_callback=api_response_callback,
@@ -378,5 +382,5 @@ async def run_pam(message_queue = deque()):  # Need to make this async since sam
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(run_pam())
+    asyncio.run(run_pam(deque(), "Open Safari using spotlight search. ONLY TAKE ONE ACTION / TOOL USE PER RESPONSE. DO NOT SEND A BUNCH OF ACTIONS AT ONCE."))
 

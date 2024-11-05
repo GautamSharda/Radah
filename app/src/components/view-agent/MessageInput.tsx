@@ -15,7 +15,9 @@ interface MessageInputInterface {
 export function MessageInput({ sendMessage, promptRunning, currentAgentID, stopAgent }: MessageInputInterface) {
     const [prompt, setPrompt] = useState<string>("");
     const sendMessageWrapper = () => {
-        sendMessage(JSON.stringify({ "message-type": "prompt", "prompt": prompt, "agent_id": currentAgentID }));
+        const message = { "message-type": "prompt", "text": prompt, "agent_id": currentAgentID };
+        console.log(message);
+        sendMessage(JSON.stringify(message));
         setPrompt("");
     }
 

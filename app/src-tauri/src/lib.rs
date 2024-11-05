@@ -89,10 +89,8 @@ async fn handle_websocket(websocket: warp::ws::WebSocket, app_handle: tauri::App
             println!("Received message: {}", text);
             
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(text) {
-                if let Some("init") = json.get("message-type").and_then(|v| v.as_str()) {
-                    println!("Received init message");
-                    
-                    if let Some(conn_type) = json.get("type").and_then(|v| v.as_str()) {
+                if let Some("init") = json.get("message-type").and_then(|v| v.as_str()) {                    
+                    if let Some(conn_type) = json.get("connection-type").and_then(|v| v.as_str()) {
                         match conn_type {
                             "agent" => {
                                 if let Some(agent_id) = json.get("container_id").and_then(|v| v.as_str()) {
@@ -122,8 +120,12 @@ async fn handle_websocket(websocket: warp::ws::WebSocket, app_handle: tauri::App
                 } else if let Some("prompt") = json.get("message-type").and_then(|v| v.as_str()) {
                     if let (Some(agent_id), Some(_prompt)) = (
                         json.get("agent_id").and_then(|v| v.as_str()),
-                        json.get("prompt").and_then(|v| v.as_str())
+                        json.get("text").and_then(|v| v.as_str())
                     ) {
+                        // Handle as agent message first
+                        println!("[INFO] Sending prompt to agent {}", agent_id);
+                        handle_agent_message(&conn_id, &tx, text, app_handle.clone()).await;
+                        
                         let agent_conns = AGENT_CONNECTIONS.lock().await;
                         if let Some(conn_info) = agent_conns.get(agent_id) {
                             if let Err(e) = conn_info.tx.lock().await.send(warp::ws::Message::text(text)).await {
@@ -164,7 +166,10 @@ async fn handle_agent_message(
     text: &str,
     app_handle: tauri::AppHandle,
 ) {
+    println!("[INFO] Handling agent message");
     if let Some(agent_id) = ID_BY_CONNECTION.lock().await.get(conn_id).cloned() {
+        println!("[INFO] Received message from agent {}", agent_id);
+
         let message_id = generate_random_id();
 
         // Parse the text into a JSON Value
@@ -177,6 +182,7 @@ async fn handle_agent_message(
 
             //send the JSON object to the client
             if let Some(client_conn) = CLIENT_CONNECTION.lock().await.as_ref() {
+                println!("[INFO] Sending message to client");
                 let json_string = serde_json::to_string(&json_message).unwrap();
                 client_conn.lock().await.send(warp::ws::Message::text(json_string)).await.unwrap();
             }

@@ -34,9 +34,11 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
         const connect = () => {
             localWS = new WebSocket('ws://localhost:3030/ws');
             setWs(localWS);
+            console.log('Connecting to WebSocket');
             localWS.addEventListener('open', () => {
+                console.log('WebSocket connected');
                 reconnectAttempt = 0; // Reset attempt counter on successful connection
-                const message = { "message-type": "init", "type": "client" };
+                const message = { "message-type": "init", "connection-type": "client" };
                 localWS?.send(JSON.stringify(message));
             });
 
@@ -47,6 +49,7 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
             });
 
             localWS.addEventListener('close', () => {
+                console.log('WebSocket closed');
                 // Calculate exponential backoff with jitter
                 setTimeout(() => {
                     reconnectAttempt++;
@@ -74,7 +77,7 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
         };
         loadMessages();
     }, [agentId]);
-    console.log('Messages:', messages);
+    console.log('Agent Section Messages:', messages);
     return (
         <>
             <ViewAgent showControls={user ? user.show_controls : false} sendMessage={sendMessage} agent={currentAgent} />

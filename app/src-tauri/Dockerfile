@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     git \
     python3-pip \
     python3-tk \
+    gnome-screenshot \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

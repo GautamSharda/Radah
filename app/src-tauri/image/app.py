@@ -5,21 +5,26 @@ import os
 from collections import deque
 from pam import run_pam
 
-RUNNING_LOCALLY = True
-HEARTBEAT = True
+#Config
+HEARTBEAT = False
 
+# Global variables
+IS_RUNNING_PROMPT = False
 # Global message queue
 message_queue = deque()
 
 # Get host IP from environment variable, fallback to localhost
-HOST_IP = os.getenv("HOST_IP", "localhost")
+
+HOST_IP = os.getenv("HOST_IP")
+RUNNING_LOCALLY = False
+if not HOST_IP:
+    HOST_IP = "localhost"
+    RUNNING_LOCALLY = True
+#is running loc
 
 async def main(agent_id):
     # Run both coroutines concurrently using asyncio.gather()
-    await asyncio.gather(
-        run_websocket_client(message_queue, agent_id),
-        # run_pam(message_queue)
-    )
+    await asyncio.gather(run_websocket_client(message_queue, agent_id))
 
 async def run_websocket_client(message_queue, agent_id):
     # Global websocket connection
@@ -35,7 +40,7 @@ async def run_websocket_client(message_queue, agent_id):
                 ws_connection = await websockets.connect(f'ws://{HOST_IP}:3030/ws')
                 print(f"Successfully connected to WebSocket server at {HOST_IP}")
                 # Send initial dummy message
-                message_queue.appendleft({"type": "agent", "container_id": agent_id, "message-type": "init"})
+                message_queue.appendleft({"connection-type": "agent", "container_id": agent_id, "message-type": "init", "prompt-running": IS_RUNNING_PROMPT})
                 return ws_connection
             except Exception as e:
                 print(f"Failed to connect to WebSocket server: {e}")
@@ -46,17 +51,33 @@ async def run_websocket_client(message_queue, agent_id):
 
     async def message_handler():
         nonlocal ws_connection
+        global IS_RUNNING_PROMPT
         while True:  # Keep trying to handle messages
             if ws_connection:
                 try:
                     while True:
                         message = await ws_connection.recv()
-                        print(f"Received message: {message}")
+                        json_message = json.loads(message)
+                        print(f"Received message: {json_message}")
+                        print(IS_RUNNING_PROMPT)
+                        if json_message["message-type"] != "prompt" or IS_RUNNING_PROMPT or "text" not in json_message:
+                            continue
+                        IS_RUNNING_PROMPT = True
+                        print("Starting Pam")
+                        try:
+                            await run_pam(message_queue, json_message["text"])
+                        except Exception as e:
+                            message_queue.append({"message-type": "message", "text": str(e), "error": True})
+                            print(f"Error running Pam: {e}")
+                        finally:
+                            IS_RUNNING_PROMPT = False
+                            message_queue.append({"message-type": "message", "text": "Agent Pam has finished running", "end_prompt": True})
+                            print("Pam finished")
+
                 except websockets.exceptions.ConnectionClosed:
                     print("WebSocket connection closed, attempting to reconnect...")
                 except Exception as e:
                     print(f"Error in message handler: {e}")
-                
                 # Connection lost, try to reconnect
                 ws_connection = await connect()
             else:
@@ -82,7 +103,7 @@ async def run_websocket_client(message_queue, agent_id):
         if HEARTBEAT:
             while True:
                 print("Sending heartbeat")
-                message_queue.append({"message": "Heartbeat ping", "message-type": "message"})
+                message_queue.append({"message-type": "message", "text": "Heartbeat ping"})
                 await asyncio.sleep(10)  # Wait 10 seconds before next heartbeat
 
     # Connect and start message handler, queue processor and heartbeat
