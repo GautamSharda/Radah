@@ -1,9 +1,7 @@
-import { MessageInput } from './MessageInput';
 import Spinner from "@/components/ui/spinner.tsx";
 import { Agent, BuildingContainer, DockerContainer } from '@/App';
 interface VncViewerProps {
   showControls: boolean;
-  sendMessage: (message: string) => void;
   agent: Agent;
 }
 
@@ -21,7 +19,7 @@ const getVncUrl = (port: number, view_only: boolean, agentId: string) => {
   return `http://localhost:${port}/vnc.html?${params.toString()}`;
 };
 
-export function VncViewer({ showControls, sendMessage, agent }: VncViewerProps) {
+export function VncViewer({ showControls, agent }: VncViewerProps) {
   if ((agent as BuildingContainer).loading) {
     return (
       <div className='flex justify-center items-center flex-col gap-2'>
@@ -41,18 +39,10 @@ export function VncViewer({ showControls, sendMessage, agent }: VncViewerProps) 
   const vncUrl = getVncUrl((agent as DockerContainer).vnc_port, !showControls, agent.agent_id);
 
   return (
-    <>
-      <div className="w-full aspect-w-16 aspect-h-9">
-        <iframe
-          src={vncUrl}
-        />
-      </div>
-      <MessageInput
-        sendMessage={sendMessage}
-        promptRunning="false"
-        currentAgentID={agent.agent_id}
-        stopAgent={() => { }}
+    <div className="w-full aspect-w-16 aspect-h-9">
+      <iframe
+        src={vncUrl}
       />
-    </>
+    </div>
   );
 } 

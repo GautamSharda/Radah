@@ -9,12 +9,11 @@ export type promptRunningType = "true" | "false" | "loading";
 
 interface ViewAgentProps {
     showControls: boolean;
-    sendMessage: (message: string) => void;
     agent: Agent | undefined;
 }
 
 
-export default function ViewAgent({ showControls, sendMessage, agent }: ViewAgentProps) {
+export default function ViewAgent({ showControls, agent }: ViewAgentProps) {
     return (
         <main className="flex-grow flex flex-col relative h-screen p-4">
             <SidebarTrigger />
@@ -22,7 +21,7 @@ export default function ViewAgent({ showControls, sendMessage, agent }: ViewAgen
                 Your Agent
             </h3>
             {agent ? (
-                <VncViewer showControls={showControls} sendMessage={sendMessage} agent={agent} />
+                <VncViewer showControls={showControls} agent={agent} />
             ) : (
                 <div className="flex justify-center items-center w-full h-full">
                     <p className='text-slate-900'>Select an agent to view their environment</p>

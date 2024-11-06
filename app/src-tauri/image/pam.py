@@ -100,6 +100,7 @@ async def sampling_loop(
     api_key: str,
     only_n_most_recent_images: int | None = None,
     max_tokens: int = 4096,
+    message_queue: deque = deque(),
 ):
     """
     Agentic sampling loop for the assistant/tool interaction of computer use.
@@ -168,12 +169,12 @@ async def sampling_loop(
         # print(f"Response: {response}")
 
         response_params = _response_to_params(response)
-        messages.append(
-            {
-                "role": "assistant",
-                "content": response_params,
-            }
-        )
+        assistant_message = {
+            "role": "assistant",
+            "content": response_params,
+        }
+        messages.append(assistant_message)
+        message_queue.append({"show_ui": False, "message-type": "message", "agent-message": assistant_message})
 
         tool_result_content: list[BetaToolResultBlockParam] = []
         for content_block in response_params:
@@ -191,7 +192,9 @@ async def sampling_loop(
         if not tool_result_content:
             return messages
 
-        messages.append({"content": tool_result_content, "role": "user"})
+        user_message = {"content": tool_result_content, "role": "user"}
+        messages.append(user_message)
+        message_queue.append({"show_ui": False, "message-type": "message", "agent-message": user_message})
 
 
 def _maybe_filter_to_n_most_recent_images(
@@ -320,9 +323,11 @@ def _maybe_prepend_system_tool_result(result: ToolResult, result_text: str):
         result_text = f"<system>{result.system}</system>\n{result_text}"
     return result_text
 
-async def run_pam(message_queue = deque(), prompt: str = ""):  # Need to make this async since sampling_loop is async
-    print("run_pam")
-    messages = [{"role": "user", "content": prompt}]
+async def run_pam(message_queue = deque(), prompt: str = "", previous_messages: list[BetaMessageParam] = []):  # Need to make this async since sampling_loop is async
+    initial_messages = {"role": "user", "content": prompt}
+    previous_messages = previous_messages + [initial_messages]
+    message_queue.append({"show_ui": False, "message-type": "message", "agent-message": initial_messages})
+    print(f"Previous messages: {previous_messages}")
     # Get screen dimensions using tkinter
     root = tk.Tk()
     width = root.winfo_screenwidth()
@@ -350,10 +355,10 @@ async def run_pam(message_queue = deque(), prompt: str = ""):  # Need to make th
         print(f"Content: {print_block}")
 
         #this is needed for the websocket server to know what to do with the message
-        print_block["message-type"] = "message"
-        message_queue.append(print_block)
+        new_message = {"show_ui": True, "message-type": "message", "agent-output": print_block}
+        message_queue.append(new_message)
     
-    def tool_output_callback(result: ToolResult, tool_id: str) -> None:
+    def tool_output_callback(result: ToolResult, tool_id: str, previous_messages: list[BetaMessageParam] = []) -> None:
         # Create a copy of the result for printing
         print_result = ToolResult(
             output=result.output,
@@ -367,12 +372,14 @@ async def run_pam(message_queue = deque(), prompt: str = ""):  # Need to make th
                             response: httpx.Response | object | None, 
                             exception: Exception | None) -> None:
         print(f"API response: {response}")
+        if exception:
+            print(f"API exception: {exception}")
 
     await sampling_loop(
         model="claude-3-5-sonnet-20241022",
         provider=APIProvider.ANTHROPIC,
         system_prompt_suffix="",
-        messages=messages,
+        messages=previous_messages,
         output_callback=output_callback,
         tool_output_callback=tool_output_callback,
         api_response_callback=api_response_callback,

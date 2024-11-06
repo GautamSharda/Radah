@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { core } from '@tauri-apps/api';
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
-import { RightSidebar, RightSidebarProvider } from "@/components/RightSidebar"
-import VieweAgent from "./components/view-agent/view-agent";
+import { RightSidebarProvider } from "@/components/RightSidebar"
 import RenderCard from "./components/RenderCard";
 import AgentSection from "./components/AgentSection";
 
@@ -31,13 +30,19 @@ export interface BuildingContainer extends BaseContainer {
 
 export type Agent = DockerContainer | BuildingContainer;
 
-export interface Message {
+export interface BaseMessage {
+  show_ui?: boolean;
   error?: boolean;
   end_message?: boolean;
-  text: string;
   'message-type': 'message' | 'prompt';
   message_id: string;
   agent_id?: string;
+}
+
+export interface Message extends BaseMessage {
+  "agent-message"?: any;
+  "agent-output"?: any;
+  text?: string;
 };
 
 export default function App() {

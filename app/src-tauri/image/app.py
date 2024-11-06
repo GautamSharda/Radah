@@ -63,15 +63,18 @@ async def run_websocket_client(message_queue, agent_id):
                         if json_message["message-type"] != "prompt" or IS_RUNNING_PROMPT or "text" not in json_message:
                             continue
                         IS_RUNNING_PROMPT = True
-                        print("Starting Pam")
+                        print("Starting Pam\n\n")
+                        #format all recent messages as an array of messages
+                        recent_messages = [message["agent-message"] for message in json_message.get("recent-messages", []) if "agent-message" in message]
+                        print(f"Recent messages: {recent_messages} \n\n")
                         try:
-                            await run_pam(message_queue, json_message["text"])
+                            await run_pam(message_queue, json_message["text"], recent_messages)
                         except Exception as e:
-                            message_queue.append({"message-type": "message", "text": str(e), "error": True})
+                            message_queue.append({"message-type": "message", "text": str(e), "error": True, "show_ui": True })
                             print(f"Error running Pam: {e}")
                         finally:
                             IS_RUNNING_PROMPT = False
-                            message_queue.append({"message-type": "message", "text": "Agent Pam has finished running", "end_message": True})
+                            message_queue.append({"message-type": "message", "text": "The agent has finished running", "end_message": True, "show_ui": True })
                             print("Pam finished")
 
                 except websockets.exceptions.ConnectionClosed:
@@ -103,7 +106,7 @@ async def run_websocket_client(message_queue, agent_id):
         if HEARTBEAT:
             while True:
                 print("Sending heartbeat")
-                message_queue.append({"message-type": "message", "text": "Heartbeat ping"})
+                message_queue.append({"message-type": "message", "text": "Heartbeat ping", "show_ui": True })
                 await asyncio.sleep(10)  # Wait 10 seconds before next heartbeat
 
     # Connect and start message handler, queue processor and heartbeat

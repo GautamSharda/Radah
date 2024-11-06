@@ -30,7 +30,7 @@ static USER: Lazy<Mutex<User>> = Lazy::new(|| Mutex::new(User { show_controls: t
 static OCCUPIED_PORTS: Lazy<Mutex<Vec<u16>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
 //Messages from agents
-static MESSAGES: Lazy<Mutex<std::collections::HashMap<String, String>>> = Lazy::new(|| {
+static MESSAGES: Lazy<Mutex<std::collections::HashMap<String, serde_json::Value>>> = Lazy::new(|| {
     Mutex::new(std::collections::HashMap::new())
 });
 
@@ -116,9 +116,9 @@ async fn handle_websocket(websocket: warp::ws::WebSocket, app_handle: tauri::App
                         }
                     }
                 } else if let Some("message") = json.get("message-type").and_then(|v| v.as_str()) {
-                    handle_agent_message(&conn_id, &tx, text, app_handle.clone()).await;
+                    handle_agent_message(&conn_id, &tx, json, app_handle.clone()).await;
                 } else if let Some("prompt") = json.get("message-type").and_then(|v| v.as_str()) {
-                    handle_client_message(&conn_id, &tx, text, app_handle.clone()).await;
+                    handle_client_message(&conn_id, &tx, json, app_handle.clone()).await;
                 }
             }
         }
@@ -148,7 +148,6 @@ fn generate_random_id() -> String {
 // Helper function to handle common message processing logic
 async fn process_message(
     message_id: String,
-    text: &str,
     json_message: serde_json::Value,
     agent_id: &str,
     app_handle: &tauri::AppHandle,
@@ -162,7 +161,7 @@ async fn process_message(
 
     // Store message
     let mut messages = MESSAGES.lock().unwrap();
-    messages.insert(message_id.clone(), text.to_string());
+    messages.insert(message_id.clone(), json_message);
     save_messages(&app_handle, &messages).unwrap();
 
     // Update container message IDs
@@ -177,7 +176,7 @@ async fn process_message(
 async fn handle_agent_message(
     conn_id: &str,
     tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>,
-    text: &str,
+    mut json_message: serde_json::Value,
     app_handle: tauri::AppHandle,
 ) {
     println!("[INFO] Handling agent message");
@@ -186,48 +185,81 @@ async fn handle_agent_message(
 
         let message_id = generate_random_id();
 
-        // Parse the text into a JSON Value
-        if let Ok(mut json_message) = serde_json::from_str::<serde_json::Value>(text) {
-            // Add agent_id to the JSON object
-            if let serde_json::Value::Object(ref mut map) = json_message {
-                map.insert("agent_id".to_string(), serde_json::Value::String(agent_id.clone()));
-                map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
-            }
-
-            process_message(message_id, text, json_message, &agent_id, &app_handle).await;
+        // Add agent_id to the JSON object
+        if let serde_json::Value::Object(ref mut map) = json_message {
+            map.insert("agent_id".to_string(), serde_json::Value::String(agent_id.clone()));
+            map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
         }
+
+        process_message(message_id, json_message, &agent_id, &app_handle).await;
     }
 }
 
-async fn handle_client_message(conn_id: &str, tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>, text: &str, app_handle: tauri::AppHandle) {
-    // Parse the text into JSON
-    if let Ok(mut json) = serde_json::from_str::<serde_json::Value>(text) {
-        // Extract values early before modifying json
-        let agent_id = json.get("agent_id")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-        let has_prompt = json.get("text").is_some();
+async fn handle_client_message(conn_id: &str, tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>, mut json: serde_json::Value, app_handle: tauri::AppHandle) {
+    // Extract values early before modifying json
+    let agent_id = json.get("agent_id")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let has_prompt = json.get("text").is_some();
 
-        if let (Some(agent_id), true) = (agent_id, has_prompt) {
-            println!("[INFO] Sending prompt to agent {}", agent_id);
-            let agent_conns = AGENT_CONNECTIONS.lock().await;
-            if let Some(conn_info) = agent_conns.get(&agent_id) {
-                if let Err(e) = conn_info.tx.lock().await.send(warp::ws::Message::text(text)).await {
-                    eprintln!("Error forwarding prompt to agent {}: {}", agent_id, e);
+    if let (Some(agent_id_value), true) = (agent_id, has_prompt) {
+        println!("[INFO] Sending prompt to agent {}", agent_id_value);
+        let agent_conns = AGENT_CONNECTIONS.lock().await;
+        if let Some(conn_info) = agent_conns.get(&agent_id_value) {
+            println!("[INFO] Found agent connection for {}", agent_id_value);
+            // Create a copy of the JSON object
+            let mut json_with_history = json.clone();
+            
+            // Get recent messages and add them to the copy
+            if let serde_json::Value::Object(ref mut map) = json_with_history {
+                println!("[INFO] Adding recent messages to JSON");
+                let recent_messages = get_recent_agent_messages(agent_id_value.clone(), 5);
+                println!("[INFO] Recent messages: {:?}", recent_messages);
+                map.insert("recent-messages".to_string(), serde_json::Value::Array(recent_messages));
+            }
+
+            // Send the copy with history over websocket
+            if let Err(e) = conn_info.tx.lock().await.send(warp::ws::Message::text(serde_json::to_string(&json_with_history).unwrap())).await {
+                eprintln!("Error forwarding prompt to agent {}: {}", agent_id_value, e);
+            }
+        }
+        
+        let message_id = generate_random_id();
+
+        // Add message_id to JSON
+        if let serde_json::Value::Object(ref mut map) = json {
+            println!("[INFO] Adding message_id to JSON");
+            map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
+            //add recent agent messages
+        }
+
+        process_message(message_id, json, &agent_id_value, &app_handle).await;
+    }
+}
+
+#[tauri::command]
+fn get_recent_agent_messages(agent_id: String, n: usize) -> Vec<serde_json::Value> {
+    let containers = DOCKER_CONTAINERS.lock().unwrap();
+    let messages = MESSAGES.lock().unwrap();
+    let mut result = Vec::new();
+
+    if let Some(container) = containers.iter().find(|c| c.agent_id == agent_id) {
+        // Iterate through message IDs in reverse order (most recent first)
+        for message_id in container.message_ids.iter().rev() {
+            if let Some(json_value) = messages.get(message_id) {
+                // Only include messages that have agent-message key
+                if json_value.get("agent-message").is_some() {
+                    result.push(json_value.clone());
+                    if result.len() >= n {
+                        break;
+                    }
                 }
             }
-            
-            let message_id = generate_random_id();
-
-            // Add message_id to JSON
-            if let serde_json::Value::Object(ref mut map) = json {
-                map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
-            }
-
-            process_message(message_id, text, json, &agent_id, &app_handle).await;
         }
     }
+    result
 }
+
 
 
 #[cfg(target_os = "macos")]
@@ -272,7 +304,7 @@ fn get_containers_file<R: Runtime>(app: &tauri::AppHandle<R>) -> PathBuf {
         .join("containers.json")
 }
 
-fn save_messages<R: Runtime>(app: &tauri::AppHandle<R>, messages: &std::collections::HashMap<String, String>) -> Result<(), String> {
+fn save_messages<R: Runtime>(app: &tauri::AppHandle<R>, messages: &std::collections::HashMap<String, serde_json::Value>) -> Result<(), String> {
     let file_path = app.path().app_data_dir()
         .expect("Failed to get app data dir")
         .join("messages.json");
@@ -497,14 +529,35 @@ fn clear_all_storage() {
 
 // Clear all messages and message IDs in the containers
 #[tauri::command]
-fn clear_all_messages() {
+fn clear_all_messages(app_handle: tauri::AppHandle) {
+    // Clear message IDs from containers
     let mut containers = DOCKER_CONTAINERS.lock().unwrap();
     for container in containers.iter_mut() {
         container.message_ids.clear();
     }
 
+    // Save updated containers to disk
+    let containers_file = app_handle.path().app_data_dir()
+        .expect("Failed to get app data dir")
+        .join("containers.json");
+    
+    if let Ok(json) = serde_json::to_string(&*containers) {
+        if let Err(e) = std::fs::write(&containers_file, json) {
+            eprintln!("Failed to save containers file: {}", e);
+        }
+    }
+
+    // Clear messages from memory
     let mut messages = MESSAGES.lock().unwrap();
     messages.clear();
+
+    // Clear messages from disk
+    let messages_file = get_messages_file(&app_handle);
+    if messages_file.exists() {
+        if let Err(e) = std::fs::remove_file(&messages_file) {
+            eprintln!("Failed to delete messages file: {}", e);
+        }
+    }
 }
 
 //read all user data
@@ -530,12 +583,12 @@ fn get_agent_messages(agent_id: String) -> Vec<serde_json::Value> {
         let messages = MESSAGES.lock().unwrap();
         
         for message_id in container.message_ids.iter() {
-            if let Some(message) = messages.get(message_id) {
-                // Parse the JSON string into a Value
-                if let Ok(mut json_value) = serde_json::from_str::<serde_json::Value>(message) {
-                    json_value["message_id"] = serde_json::Value::String(message_id.clone());
-                    messages_array.push(json_value);
+            if let Some(json_value) = messages.get(message_id) {
+                let mut json_value = json_value.clone();
+                if let serde_json::Value::Object(ref mut map) = json_value {
+                    map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
                 }
+                messages_array.push(json_value);
             }
         }
     }
@@ -550,7 +603,7 @@ fn get_messages_file<R: Runtime>(app: &tauri::AppHandle<R>) -> PathBuf {
 }
 
 // Add this function to load messages
-fn load_messages<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<std::collections::HashMap<String, String>, String> {
+fn load_messages<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<std::collections::HashMap<String, serde_json::Value>, String> {
     let file_path = get_messages_file(app);
     
     if !file_path.exists() {

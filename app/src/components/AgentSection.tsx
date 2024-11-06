@@ -12,12 +12,7 @@ interface AgentProps {
 
 export default function AgentSection({ user, currentAgent }: AgentProps) {
     const [messages, setMessages] = useState<Message[]>([]);
-    const [agent, setAgent] = useState<Agent | undefined>(currentAgent);
     const [ws, setWs] = useState<WebSocket | null>(null);
-
-    useEffect(() => {
-        setAgent(currentAgent);
-    }, [currentAgent]);
 
 
     function sendMessage(message: string) {
@@ -80,8 +75,8 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
     console.log('Agent Section Messages:', messages);
     return (
         <>
-            <ViewAgent showControls={user ? user.show_controls : false} sendMessage={sendMessage} agent={currentAgent} />
-            <RightSidebar messages={messages} agentId={agentId} />
+            <ViewAgent showControls={user ? user.show_controls : false} agent={currentAgent} />
+            <RightSidebar messages={messages} agentId={agentId} sendMessage={sendMessage} />
         </>
     )
 }
