@@ -4,9 +4,6 @@ import { SidebarTrigger } from "../ui/sidebar";
 import { VncViewer } from "./VncViewer";
 
 
-export type promptRunningType = "true" | "false" | "loading";
-
-
 interface ViewAgentProps {
     showControls: boolean;
     agent: Agent | undefined;
@@ -17,7 +14,7 @@ export default function ViewAgent({ showControls, agent }: ViewAgentProps) {
     return (
         <main className="flex-grow flex flex-col relative h-screen p-4">
             <SidebarTrigger />
-            <h3 className="w-full text-center text-4xl font-bold font-mono text-slate-900 my-8">
+            <h3 className="w-full text-center text-4xl font-bold text-slate-900 my-8">
                 Your Agent
             </h3>
             {agent ? (

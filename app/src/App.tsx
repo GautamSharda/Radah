@@ -34,7 +34,7 @@ export interface BaseMessage {
   show_ui?: boolean;
   error?: boolean;
   end_message?: boolean;
-  'message-type': 'message' | 'prompt';
+  'message-type': 'message' | 'prompt' | 'stop';
   message_id: string;
   agent_id?: string;
 }
@@ -66,7 +66,7 @@ export default function App() {
       const user = await core.invoke<User>('get_user_data');
       // await core.invoke<User>('clear_all_storage');
       // await core.invoke<User>('print_all_storage');
-      // await core.invoke<User>('clear_all_messages');
+      await core.invoke<User>('clear_all_messages');
       // await core.invoke<User>('print_all_storage');
       setUser(user);
     } catch (error) {

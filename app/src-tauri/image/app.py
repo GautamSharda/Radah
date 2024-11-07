@@ -9,7 +9,7 @@ from pam import run_pam
 HEARTBEAT = False
 
 # Global variables
-IS_RUNNING_PROMPT = False
+prompt_running = ["stopped"] #"running", "stopped", "loading"
 # Global message queue
 message_queue = deque()
 
@@ -21,6 +21,12 @@ if not HOST_IP:
     HOST_IP = "localhost"
     RUNNING_LOCALLY = True
 #is running loc
+
+
+def get_prompt_running():
+    print('we have hit global prompt running')
+    print(f'prompt running: {prompt_running[0]}')
+    return prompt_running[0]
 
 async def main(agent_id):
     # Run both coroutines concurrently using asyncio.gather()
@@ -40,7 +46,7 @@ async def run_websocket_client(message_queue, agent_id):
                 ws_connection = await websockets.connect(f'ws://{HOST_IP}:3030/ws')
                 print(f"Successfully connected to WebSocket server at {HOST_IP}")
                 # Send initial dummy message
-                message_queue.appendleft({"connection-type": "agent", "container_id": agent_id, "message-type": "init", "prompt-running": IS_RUNNING_PROMPT})
+                message_queue.appendleft({"connection-type": "agent", "container_id": agent_id, "message-type": "init", "prompt_running": prompt_running[0], "show_ui": False})
                 return ws_connection
             except Exception as e:
                 print(f"Failed to connect to WebSocket server: {e}")
@@ -51,31 +57,37 @@ async def run_websocket_client(message_queue, agent_id):
 
     async def message_handler():
         nonlocal ws_connection
-        global IS_RUNNING_PROMPT
+
+        async def promptMessageHandler(json_message):
+            if json_message["message-type"] != "prompt" or prompt_running[0] != "stopped" or "text" not in json_message:
+                return
+            prompt_running[0] = "running"
+            #format all recent messages as an array of messages
+            recent_messages = [message["agent-message"] for message in json_message.get("recent-messages", []) if "agent-message" in message]
+            try:
+                #This is where the magic happens
+                await run_pam(message_queue, json_message["text"], recent_messages, get_prompt_running)
+            except Exception as e:
+                message_queue.append({"message-type": "message", "text": f"Error running Pam: {str(e)}", "error": True, "show_ui": True })
+                print(f"Error running Pam: {e}")
+            finally:
+                prompt_running[0] = "stopped"
+                message_queue.append({"message-type": "message", "text": "The agent has finished running", "end_message": True, "show_ui": True, "prompt_running": prompt_running[0] })
+                print("Pam finished")
+
+
         while True:  # Keep trying to handle messages
             if ws_connection:
                 try:
                     while True:
                         message = await ws_connection.recv()
                         json_message = json.loads(message)
-                        print(f"Received message: {json_message}")
-                        print(IS_RUNNING_PROMPT)
-                        if json_message["message-type"] != "prompt" or IS_RUNNING_PROMPT or "text" not in json_message:
-                            continue
-                        IS_RUNNING_PROMPT = True
-                        print("Starting Pam\n\n")
-                        #format all recent messages as an array of messages
-                        recent_messages = [message["agent-message"] for message in json_message.get("recent-messages", []) if "agent-message" in message]
-                        print(f"Recent messages: {recent_messages} \n\n")
-                        try:
-                            await run_pam(message_queue, json_message["text"], recent_messages)
-                        except Exception as e:
-                            message_queue.append({"message-type": "message", "text": str(e), "error": True, "show_ui": True })
-                            print(f"Error running Pam: {e}")
-                        finally:
-                            IS_RUNNING_PROMPT = False
-                            message_queue.append({"message-type": "message", "text": "The agent has finished running", "end_message": True, "show_ui": True })
-                            print("Pam finished")
+                        print(f"Received message: {json_message}\n\n")
+                        if json_message["message-type"] == "prompt":
+                            asyncio.create_task(promptMessageHandler(json_message))
+                        elif json_message["message-type"] == "stop":
+                            print("Updating prompt running to stopped")
+                            prompt_running[0] = "stopped"
 
                 except websockets.exceptions.ConnectionClosed:
                     print("WebSocket connection closed, attempting to reconnect...")

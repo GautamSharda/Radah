@@ -101,6 +101,7 @@ async def sampling_loop(
     only_n_most_recent_images: int | None = None,
     max_tokens: int = 4096,
     message_queue: deque = deque(),
+    get_prompt_running: Callable[[], str] = lambda: "running",
 ):
     """
     Agentic sampling loop for the assistant/tool interaction of computer use.
@@ -116,6 +117,11 @@ async def sampling_loop(
     )
 
     while True:
+        prompt_running = get_prompt_running()
+
+        if prompt_running != "running":
+            return messages
+
         enable_prompt_caching = False
         betas = [COMPUTER_USE_BETA_FLAG]
         image_truncation_threshold = 10
@@ -323,11 +329,11 @@ def _maybe_prepend_system_tool_result(result: ToolResult, result_text: str):
         result_text = f"<system>{result.system}</system>\n{result_text}"
     return result_text
 
-async def run_pam(message_queue = deque(), prompt: str = "", previous_messages: list[BetaMessageParam] = []):  # Need to make this async since sampling_loop is async
+async def run_pam(message_queue = deque(), prompt: str = "", previous_messages: list[BetaMessageParam] = [], get_prompt_running = lambda: "running"):  # Need to make this async since sampling_loop is async
     initial_messages = {"role": "user", "content": prompt}
     previous_messages = previous_messages + [initial_messages]
     message_queue.append({"show_ui": False, "message-type": "message", "agent-message": initial_messages})
-    print(f"Previous messages: {previous_messages}")
+
     # Get screen dimensions using tkinter
     root = tk.Tk()
     width = root.winfo_screenwidth()
@@ -371,7 +377,6 @@ async def run_pam(message_queue = deque(), prompt: str = "", previous_messages: 
     def api_response_callback(request: httpx.Request, 
                             response: httpx.Response | object | None, 
                             exception: Exception | None) -> None:
-        print(f"API response: {response}")
         if exception:
             print(f"API exception: {exception}")
 
@@ -383,7 +388,9 @@ async def run_pam(message_queue = deque(), prompt: str = "", previous_messages: 
         output_callback=output_callback,
         tool_output_callback=tool_output_callback,
         api_response_callback=api_response_callback,
-        api_key=os.getenv("ANTHROPIC_API_KEY")
+        api_key=os.getenv("ANTHROPIC_API_KEY"),
+        get_prompt_running=get_prompt_running,
+        message_queue=message_queue
     )
 
 
