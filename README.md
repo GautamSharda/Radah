@@ -10,6 +10,8 @@ Because Radah aims to run on many platforms, it is a [Tauri](https://tauri.app/)
 
 To run Radah, make sure you have Docker installed and running on your system.
 
+In `src/-tauri` create a `.env` file with the same keys that are listed in in `.env.example`.
+
 Then, run the following commands:
 
 ```
@@ -20,6 +22,10 @@ npm run tauri dev
 ```
 
 Wait a few seconds and the Radah application should open.
+
+
+
+
 
 # Contributing
 

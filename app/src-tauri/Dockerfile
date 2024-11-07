@@ -79,13 +79,12 @@ RUN python3 init.py
 EXPOSE 5900
 EXPOSE 6080
 
-# Add environment variable for container ID
+# Add environment variables
 ENV CONTAINER_ID=""
-
-# Add environment variable for host IP
 ENV HOST_IP="host.docker.internal"
+ENV ANTHROPIC_API_KEY=""
 
-# Modify the CMD to accept container ID and host IP
-ENTRYPOINT ["/bin/bash", "-c", "export CONTAINER_ID=${CONTAINER_ID} && export HOST_IP=${HOST_IP} && /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
+# Modify the CMD to accept container ID, host IP, and API key
+ENTRYPOINT ["/bin/bash", "-c", "export CONTAINER_ID=${CONTAINER_ID} && export HOST_IP=${HOST_IP} && export ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} && /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

@@ -66,7 +66,7 @@ export default function App() {
       const user = await core.invoke<User>('get_user_data');
       // await core.invoke<User>('clear_all_storage');
       // await core.invoke<User>('print_all_storage');
-      await core.invoke<User>('clear_all_messages');
+      // await core.invoke<User>('clear_all_messages');
       // await core.invoke<User>('print_all_storage');
       setUser(user);
     } catch (error) {
