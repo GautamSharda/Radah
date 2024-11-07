@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { RightSidebar } from "./RightSidebar";
-import ViewAgent from "./view-agent/view-agent";
+import ViewAgent from "./view-agent/ViewAgent";
 import type { Agent, User, Message } from "@/App";
 import { core } from "@tauri-apps/api";
 
@@ -17,21 +17,25 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
     const [ws, setWs] = useState<WebSocket | null>(null);
     const [isWebSocketOpen, setIsWebSocketOpen] = useState<boolean>(false);
     const [promptRunning, setPromptRunning] = useState<promptRunningType>("loading");
-    const currentAgentRef = useRef<Agent | undefined>(undefined);
+    const [switchingAgent, setSwitchingAgent] = useState<boolean>(true);
     const agentId = currentAgent?.agent_id;
     useEffect(() => {
-        currentAgentRef.current = currentAgent;
         const loadAgent = async () => {
-            if (!agentId) return;
+            //@ts-ignore
+            if (!agentId || !currentAgent?.id) return;
+            //@ts-ignore
+            await core.invoke('start_container', { containerId: currentAgent?.id });
             const messages = await core.invoke<Message[]>('get_agent_messages', { agentId });
             setMessages(messages);
             const promptRunning = await core.invoke<string>('get_prompt_running', { agentId });
-            console.log('Prompt running:', promptRunning);
             setPromptRunning(promptRunning as promptRunningType);
+            setSwitchingAgent(false);
+
         };
         loadAgent();
         setPromptRunning("loading");
         setIsWebSocketOpen(false);
+        setSwitchingAgent(true);
     }, [agentId]);
 
     function sendMessage(message: string) {
@@ -104,7 +108,7 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
 
     return (
         <>
-            <ViewAgent showControls={user ? user.show_controls : false} agent={currentAgent} />
+            <ViewAgent showControls={user ? user.show_controls : false} agent={currentAgent} switchingAgent={switchingAgent} />
             <RightSidebar messages={messages} agentId={agentId} sendMessage={sendMessageWrapper} promptRunning={promptRunning} stopAgent={stopAgent} isWebSocketOpen={isWebSocketOpen} />
         </>
     )

@@ -296,7 +296,6 @@ async fn get_prompt_running(agent_id: String) -> String {
     AGENT_CONNECTIONS.lock().await.get(&agent_id).map(|conn| conn.prompt_running.clone()).unwrap_or("loading".to_string())
 }
 
-#[tauri::command]
 fn get_recent_agent_messages(agent_id: String, n: usize) -> Vec<serde_json::Value> {
     let containers = DOCKER_CONTAINERS.lock().unwrap();
     let messages = MESSAGES.lock().unwrap();
@@ -525,6 +524,20 @@ async fn cleanup_agent_container(app_handle: tauri::AppHandle, agent_id: String)
     Ok(())
 }
 
+
+// start container takes a container id and starts the container by running docker start
+#[tauri::command]
+async fn start_container(container_id: String) -> Result<(), String> {
+    println!("Starting container: {}", container_id);
+    tokio::process::Command::new("docker")
+        .args(&["start", &container_id])
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+
 #[tauri::command]
 fn get_all_containers() -> Vec<DockerContainer> {
     let containers = DOCKER_CONTAINERS.lock().unwrap();
@@ -718,6 +731,7 @@ pub fn run() {
             clear_all_storage,
             get_agent_messages,
             clear_all_messages,
+            start_container,
             get_prompt_running
         ])
         .run(tauri::generate_context!())
@@ -791,4 +805,19 @@ pub fn run() {
 
 //     println!("Docker container started successfully.");
 //     Ok(())
+// }
+
+// // Get container state takes a container id and returns the container state by running docker inspect, then getting the state from the output
+// async fn get_container_state(container_id: String) -> Result<String, String> {
+//     let output = tokio::process::Command::new("docker")
+//         .args(&["inspect", &container_id])
+//         .output()
+//         .await
+//         .map_err(|e| e.to_string())?;
+
+//     //parse as json, get the first element in the array, then get state, then get status
+//     let json: serde_json::Value = serde_json::from_slice(&output.stdout)
+//         .map_err(|e| e.to_string())?;
+//     let state = json[0]["State"]["Status"].as_str().unwrap_or("unknown").to_string();
+//     Ok(state)
 // }
