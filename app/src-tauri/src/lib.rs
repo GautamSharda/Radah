@@ -55,11 +55,11 @@ static DOCKER_CONTAINERS: Lazy<Mutex<Vec<DockerContainer>>> = Lazy::new(|| {
 static CLIENT_CONNECTION: Lazy<Arc<AsyncMutex<Option<Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>>>>> = 
     Lazy::new(|| Arc::new(AsyncMutex::new(None)));
 
+
 #[derive(Debug)]
 struct ConnectionInfo {
     tx: Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>,
-    connection_type: String,
-    status: String,
+    prompt_running: String, //"running", "stopped", "loading"
 }
 
 // Global connection maps using Arc<AsyncMutex>
@@ -78,53 +78,6 @@ fn get_app_handle() -> Option<tauri::AppHandle> {
     APP_HANDLE.lock().unwrap().clone()
 }
 
-//Handle websocket connections
-async fn handle_websocket(websocket: warp::ws::WebSocket, app_handle: tauri::AppHandle) {
-    let (ws_tx, mut rx) = websocket.split();
-    let tx = Arc::new(AsyncMutex::new(ws_tx));
-    let conn_id = uuid::Uuid::new_v4().to_string();
-
-    while let Some(Ok(message)) = rx.next().await {
-        if let Ok(text) = message.to_str() {
-            println!("Received message: {}", text);
-            
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(text) {
-                if let Some("init") = json.get("message-type").and_then(|v| v.as_str()) {                    
-                    if let Some(conn_type) = json.get("connection-type").and_then(|v| v.as_str()) {
-                        match conn_type {
-                            "agent" => {
-                                if let Some(agent_id) = json.get("container_id").and_then(|v| v.as_str()) {
-                                    let mut agent_conns = AGENT_CONNECTIONS.lock().await;
-                                    let mut id_conns = ID_BY_CONNECTION.lock().await;
-                                    
-                                    agent_conns.insert(agent_id.to_string(), ConnectionInfo {
-                                        tx: tx.clone(),
-                                        connection_type: "agent".to_string(),
-                                        status: "connected".to_string()
-                                    });
-                                    
-                                    id_conns.insert(conn_id.clone(), agent_id.to_string());
-                                    println!("Agent {} connection initialized", agent_id);
-                                }
-                            },
-                            "client" => {
-                                let mut client_conn = CLIENT_CONNECTION.lock().await;
-                                *client_conn = Some(tx.clone());
-                                println!("Client connection initialized");
-                            },
-                            _ => println!("Unknown connection type: {}", conn_type)  // Add catch-all case
-                        }
-                    }
-                } else if let Some("message") = json.get("message-type").and_then(|v| v.as_str()) {
-                    handle_agent_message(&conn_id, &tx, json, app_handle.clone()).await;
-                } else if let Some("prompt") = json.get("message-type").and_then(|v| v.as_str()) {
-                    handle_client_message(&conn_id, &tx, json, app_handle.clone()).await;
-                }
-            }
-        }
-    }
-}
-
 async fn start_websocket_server() {
     let app_handle = get_app_handle().expect("Failed to get app handle");
     let app_handle = warp::any().map(move || app_handle.clone());
@@ -138,6 +91,106 @@ async fn start_websocket_server() {
 
     println!("WebSocket server starting on ws://127.0.0.1:3030/ws");
     warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
+}
+
+//Handle websocket connections
+async fn handle_websocket(websocket: warp::ws::WebSocket, app_handle: tauri::AppHandle) {
+    let (ws_tx, mut rx) = websocket.split();
+    let tx = Arc::new(AsyncMutex::new(ws_tx));
+    let conn_id = uuid::Uuid::new_v4().to_string();
+
+    while let Some(Ok(message)) = rx.next().await {
+        if let Ok(text) = message.to_str() {
+            //truncate
+            let truncated_text = text.chars().take(250).collect::<String>();
+            println!("[INFO] Received message: {}", truncated_text);
+            
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(text) {
+                if let Some("init") = json.get("message-type").and_then(|v| v.as_str()) {
+                    handle_init_message(&conn_id, &tx, &json).await;
+                } else if let Some("message") = json.get("message-type").and_then(|v| v.as_str()) {
+                    handle_agent_message(&conn_id, &tx, json, app_handle.clone()).await;
+                } else if let Some("prompt") = json.get("message-type").and_then(|v| v.as_str()) {
+                    handle_client_message(&conn_id, &tx, json, app_handle.clone(), true).await;
+                } else if let Some("stop") = json.get("message-type").and_then(|v| v.as_str()) {
+                    handle_client_message(&conn_id, &tx, json, app_handle.clone(), false).await;
+                }
+            }
+        }
+    }
+
+    // Handle disconnection
+    handle_disconnection(&conn_id).await;
+}
+
+// Handle disconnection logic
+async fn handle_disconnection(conn_id: &str) {
+    let mut agent_conns = AGENT_CONNECTIONS.lock().await;
+    let mut id_conns = ID_BY_CONNECTION.lock().await;
+
+    if let Some(agent_id) = id_conns.get(conn_id) {
+        // First, get the tx value we need
+        let tx = if let Some(conn_info) = agent_conns.get(agent_id) {
+            conn_info.tx.clone()
+        } else {
+            return;
+        };
+
+        // Now we can safely update the connection info
+        agent_conns.insert(agent_id.to_string(), ConnectionInfo {
+            tx,
+            prompt_running: "loading".to_string(),
+        });
+
+
+        // Send updated prompt running status to the client
+        if let Some(client_conn) = CLIENT_CONNECTION.lock().await.as_ref() {
+            let message = serde_json::json!({
+                "agent_id": agent_id,
+                "prompt_running": "loading"
+            });
+            let json_string = serde_json::to_string(&message).unwrap();
+            if let Err(e) = client_conn.lock().await.send(warp::ws::Message::text(json_string)).await {
+                eprintln!("Error sending disconnect message to client: {}", e);
+            }
+        }
+    }
+}
+
+async fn handle_init_message(
+    conn_id: &str,
+    tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>,
+    json: &serde_json::Value,
+) {
+    if let Some(conn_type) = json.get("connection-type").and_then(|v| v.as_str()) {
+        match conn_type {
+            "agent" => {
+                if let Some(agent_id) = json.get("container_id").and_then(|v| v.as_str()) {
+                    let mut agent_conns = AGENT_CONNECTIONS.lock().await;
+                    let mut id_conns = ID_BY_CONNECTION.lock().await;
+
+                    let prompt_running = json.get("prompt_running").and_then(|v| v.as_str()).unwrap_or("stopped").to_string();
+                    
+                    agent_conns.insert(agent_id.to_string(), ConnectionInfo {
+                        tx: tx.clone(),
+                        prompt_running: prompt_running,
+                    });
+                    
+                    id_conns.insert(conn_id.to_string(), agent_id.to_string());
+                    // Forward this message to the client
+                    if let Some(client_conn) = CLIENT_CONNECTION.lock().await.as_ref() {
+                        let json_string = serde_json::to_string(&json).unwrap();
+                        client_conn.lock().await.send(warp::ws::Message::text(json_string)).await.unwrap();
+                    }
+                }
+            },
+            "client" => {
+                let mut client_conn = CLIENT_CONNECTION.lock().await;
+                *client_conn = Some(tx.clone());
+            },
+            _ => println!("Unknown connection type: {}", conn_type)  // Add catch-all case
+        }
+    }
 }
 
 //Generate a random ID
@@ -154,7 +207,6 @@ async fn process_message(
 ) {
     // Send to client connection
     if let Some(client_conn) = CLIENT_CONNECTION.lock().await.as_ref() {
-        println!("[INFO] Sending message to client");
         let json_string = serde_json::to_string(&json_message).unwrap();
         client_conn.lock().await.send(warp::ws::Message::text(json_string)).await.unwrap();
     }
@@ -175,47 +227,49 @@ async fn process_message(
 //Handle messages from agents
 async fn handle_agent_message(
     conn_id: &str,
-    tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>,
+    _tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>,
     mut json_message: serde_json::Value,
     app_handle: tauri::AppHandle,
 ) {
-    println!("[INFO] Handling agent message");
     if let Some(agent_id) = ID_BY_CONNECTION.lock().await.get(conn_id).cloned() {
-        println!("[INFO] Received message from agent {}", agent_id);
-
         let message_id = generate_random_id();
 
         // Add agent_id to the JSON object
         if let serde_json::Value::Object(ref mut map) = json_message {
             map.insert("agent_id".to_string(), serde_json::Value::String(agent_id.clone()));
             map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
+            // Update prompt_running if present in message
+            if let Some(prompt_running) = map.get("prompt_running").and_then(|v| v.as_str()) {
+                if let Some(agent_conn) = AGENT_CONNECTIONS.lock().await.get_mut(&agent_id) {
+                    agent_conn.prompt_running = prompt_running.to_string();
+                }
+            }
         }
-
         process_message(message_id, json_message, &agent_id, &app_handle).await;
     }
 }
 
-async fn handle_client_message(conn_id: &str, tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>, mut json: serde_json::Value, app_handle: tauri::AppHandle) {
+
+async fn handle_client_message(_conn_id: &str, _tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>, mut json: serde_json::Value, app_handle: tauri::AppHandle, get_recents_messages: bool) {
     // Extract values early before modifying json
     let agent_id = json.get("agent_id")
         .and_then(|v| v.as_str())
         .map(String::from);
-    let has_prompt = json.get("text").is_some();
 
-    if let (Some(agent_id_value), true) = (agent_id, has_prompt) {
-        println!("[INFO] Sending prompt to agent {}", agent_id_value);
-        let agent_conns = AGENT_CONNECTIONS.lock().await;
-        if let Some(conn_info) = agent_conns.get(&agent_id_value) {
-            println!("[INFO] Found agent connection for {}", agent_id_value);
+    if let Some(agent_id_value) = agent_id {
+        let mut agent_conns = AGENT_CONNECTIONS.lock().await;
+        if let Some(conn_info) = agent_conns.get_mut(&agent_id_value) {
+            // Set prompt running to "running"
+            conn_info.prompt_running = "running".to_string();
+            
             // Create a copy of the JSON object
             let mut json_with_history = json.clone();
-            
-            // Get recent messages and add them to the copy
-            if let serde_json::Value::Object(ref mut map) = json_with_history {
-                println!("[INFO] Adding recent messages to JSON");
-                let recent_messages = get_recent_agent_messages(agent_id_value.clone(), 5);
-                println!("[INFO] Recent messages: {:?}", recent_messages);
-                map.insert("recent-messages".to_string(), serde_json::Value::Array(recent_messages));
+            // Get recent messages and add them to the copy if requested
+            if get_recents_messages {
+                if let serde_json::Value::Object(ref mut map) = json_with_history {
+                    let recent_messages = get_recent_agent_messages(agent_id_value.clone(), 5);
+                    map.insert("recent-messages".to_string(), serde_json::Value::Array(recent_messages));
+                }
             }
 
             // Send the copy with history over websocket
@@ -228,13 +282,17 @@ async fn handle_client_message(conn_id: &str, tx: &Arc<AsyncMutex<futures::strea
 
         // Add message_id to JSON
         if let serde_json::Value::Object(ref mut map) = json {
-            println!("[INFO] Adding message_id to JSON");
             map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
             //add recent agent messages
         }
 
         process_message(message_id, json, &agent_id_value, &app_handle).await;
     }
+}
+
+#[tauri::command]
+async fn get_prompt_running(agent_id: String) -> String {
+    AGENT_CONNECTIONS.lock().await.get(&agent_id).map(|conn| conn.prompt_running.clone()).unwrap_or("loading".to_string())
 }
 
 #[tauri::command]
@@ -257,7 +315,7 @@ fn get_recent_agent_messages(agent_id: String, n: usize) -> Vec<serde_json::Valu
             }
         }
     }
-    result
+    result.into_iter().rev().collect()
 }
 
 
@@ -656,6 +714,7 @@ pub fn run() {
             clear_all_storage,
             get_agent_messages,
             clear_all_messages,
+            get_prompt_running
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
