@@ -9,6 +9,7 @@ use serde::{Serialize, Deserialize};
 use tauri::Manager;
 use tauri::Runtime;
 use uuid;
+use dotenv::dotenv;
 
 // Add these imports for WebSocket functionality
 use warp::Filter;
@@ -459,6 +460,7 @@ async fn create_agent_container(app_handle: tauri::AppHandle, agent_id: String, 
             "-d",  // Run in detached mode
             "-e", "DISPLAY=:0",
             "-e", &format!("CONTAINER_ID={}", agent_id),
+            "-e", &format!("ANTHROPIC_API_KEY={}", env::var("ANTHROPIC_API_KEY").unwrap()),
             "-e", "GEOMETRY=1920x1080",
             "-e", "HOST_IP=host.docker.internal",
             "-p", &format!("{}:5900", vnc_port),
@@ -677,6 +679,8 @@ fn load_messages<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<std::collectio
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    dotenv().ok();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
