@@ -424,16 +424,41 @@ async fn create_agent_container(app_handle: tauri::AppHandle, agent_id: String, 
     let novnc_port = ports[1];
 
     // Check if Podman daemon is running
+    println!("Checking podman status...");
     let podman_check = Command::new("podman")
         .args(&["info"])
         .output()
         .map_err(|e| format!("Failed to check Podman status: {}. Is Podman running?", e))?;
 
     if !podman_check.status.success() {
+        let stderr = String::from_utf8_lossy(&podman_check.stderr);
+        println!("Podman check failed: {}", stderr);
         return Err("Podman daemon is not running. Please start Podman first.".to_string());
+    }
+    println!("Podman is running");
+
+    // Check for existing container with same name and remove it
+    let container_name = format!("agent-{}", agent_id);
+    println!("Checking for existing container: {}", container_name);
+    
+    let existing = Command::new("podman")
+        .args(&["ps", "-a", "--filter", &format!("name={}", container_name)])
+        .output()
+        .map_err(|e| format!("Failed to check existing containers: {}", e))?;
+
+    if !String::from_utf8_lossy(&existing.stdout).trim().is_empty() {
+        println!("Found existing container, removing it...");
+        let _ = Command::new("podman")
+            .args(&["rm", "-f", &container_name])
+            .output()
+            .map_err(|e| format!("Failed to remove existing container: {}", e))?;
+        println!("Removed existing container");
     }
 
     // Build the Podman image
+    println!("Building container image...");
+    println!("Build context: {}", env!("CARGO_MANIFEST_DIR"));
+    
     let build_output = Command::new("podman")
         .args(&[
             "build",
@@ -444,42 +469,60 @@ async fn create_agent_container(app_handle: tauri::AppHandle, agent_id: String, 
         .output()
         .map_err(|e| format!("Failed to execute podman build command: {}", e))?;
 
+    // Always print build output regardless of success/failure
+    let stderr = String::from_utf8_lossy(&build_output.stderr);
+    let stdout = String::from_utf8_lossy(&build_output.stdout);
+    println!("Build stdout:\n{}", stdout);
+    println!("Build stderr:\n{}", stderr);
+
     if !build_output.status.success() {
-        let stderr = String::from_utf8_lossy(&build_output.stderr);
-        let stdout = String::from_utf8_lossy(&build_output.stdout);
-        println!("Podman build failed with stderr: {}", stderr);
-        println!("Podman build stdout: {}", stdout);
         return Err(format!("Podman build failed.\nStderr: {}\nStdout: {}", stderr, stdout));
     }
+    println!("Container image built successfully");
 
     // Run the Podman container
+    println!("Starting container...");
+    
+    // Create the formatted strings first
+    let container_id_env = format!("CONTAINER_ID={}", agent_id);
+    let api_key_env = format!("ANTHROPIC_API_KEY={}", env::var("ANTHROPIC_API_KEY").unwrap());
+    let vnc_port_mapping = format!("{}:5900", vnc_port);
+    let novnc_port_mapping = format!("{}:6080", novnc_port);
+    let container_name = format!("agent-{}", agent_id);
+
+    let run_args = vec![
+        "run",
+        "-d",  // Run in detached mode
+        "--network", "bridge",  // Explicitly use bridge networking
+        "-e", "DISPLAY=:0",
+        "-e", &container_id_env,
+        "-e", &api_key_env,
+        "-e", "GEOMETRY=1920x1080",
+        "-e", "HOST_IP=host.containers.internal",
+        "-p", &vnc_port_mapping,
+        "-p", &novnc_port_mapping,
+        "--name", &container_name,
+        // Remove the problematic --add-host flag and use DNS instead
+        "minimal-vnc-desktop",
+    ];
+    println!("Running podman with args: {:?}", run_args);
+
     let run_output = Command::new("podman")
-        .args(&[
-            "run",
-            "-d",  // Run in detached mode
-            "-e", "DISPLAY=:0",
-            "-e", &format!("CONTAINER_ID={}", agent_id),
-            "-e", &format!("ANTHROPIC_API_KEY={}", env::var("ANTHROPIC_API_KEY").unwrap()),
-            "-e", "GEOMETRY=1920x1080",
-            "-e", "HOST_IP=host.containers.internal", // Changed from host.docker.internal
-            "-p", &format!("{}:5900", vnc_port),
-            "-p", &format!("{}:6080", novnc_port),
-            "--name", &format!("agent-{}", agent_id),
-            // Podman equivalent of --add-host
-            "--add-host", "host.containers.internal:host-gateway",
-            "minimal-vnc-desktop",
-        ])
+        .args(&run_args)
         .output()
         .map_err(|e| e.to_string())?;
 
+    let run_stderr = String::from_utf8_lossy(&run_output.stderr);
+    let run_stdout = String::from_utf8_lossy(&run_output.stdout);
+    println!("Run stdout:\n{}", run_stdout);
+    println!("Run stderr:\n{}", run_stderr);
+
     if !run_output.status.success() {
-        let error = String::from_utf8_lossy(&run_output.stderr);
-        return Err(format!("Failed to start container: {}", error));
+        return Err(format!("Failed to start container.\nStderr: {}\nStdout: {}", run_stderr, run_stdout));
     }
 
-    let container_id = String::from_utf8_lossy(&run_output.stdout)
-        .trim()
-        .to_string();
+    let container_id = run_stdout.trim().to_string();
+    println!("Container started successfully with ID: {}", container_id);
 
     let container = Container {
         id: container_id,
@@ -494,6 +537,7 @@ async fn create_agent_container(app_handle: tauri::AppHandle, agent_id: String, 
     containers.push(container.clone());
     
     save_containers(&app_handle, &containers)?;
+    println!("Container metadata saved");
 
     Ok(container)
 }
@@ -547,7 +591,7 @@ async fn cleanup_agent_container(app_handle: tauri::AppHandle, agent_id: String)
 #[tauri::command]
 async fn start_container(container_id: String) -> Result<(), String> {
     println!("Starting container: {}", container_id);
-    tokio::process::Command::new("docker")
+    tokio::process::Command::new("podman")
         .args(&["start", &container_id])
         .output()
         .await
