@@ -42,19 +42,19 @@ static MESSAGES: Lazy<Mutex<std::collections::HashMap<String, serde_json::Value>
     Mutex::new(std::collections::HashMap::new())
 });
 
-//Docker container metadata
+//Container metadata
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct DockerContainer {
+struct Container {
     id: String,
     vnc_port: u16,
     number: i32,
-    agent_type: String, // Either "jim" or "pam"
+    agent_type: String,
     message_ids: Vec<String>,
     agent_id: String,
 }
 
-//Docker containers
-static DOCKER_CONTAINERS: Lazy<Mutex<Vec<DockerContainer>>> = Lazy::new(|| {
+//Containers
+static CONTAINERS: Lazy<Mutex<Vec<Container>>> = Lazy::new(|| {
     Mutex::new(Vec::new())
 });
 
@@ -253,7 +253,7 @@ async fn process_message(
     save_messages(&app_handle, &messages).unwrap();
 
     // Update container message IDs
-    let mut containers = DOCKER_CONTAINERS.lock().unwrap();
+    let mut containers = CONTAINERS.lock().unwrap();
     if let Some(container) = containers.iter_mut().find(|c| c.agent_id == agent_id) {
         container.message_ids.push(message_id);
         save_containers(&app_handle, &containers).unwrap();
@@ -332,7 +332,7 @@ async fn get_prompt_running(agent_id: String) -> String {
 }
 
 fn get_recent_agent_messages(agent_id: String, n: usize) -> Vec<serde_json::Value> {
-    let containers = DOCKER_CONTAINERS.lock().unwrap();
+    let containers = CONTAINERS.lock().unwrap();
     let messages = MESSAGES.lock().unwrap();
     let mut result = Vec::new();
 
@@ -418,7 +418,7 @@ fn save_messages<R: Runtime>(app: &tauri::AppHandle<R>, messages: &std::collecti
     Ok(())
 }
 
-fn save_containers<R: Runtime>(app: &tauri::AppHandle<R>, containers: &[DockerContainer]) -> Result<(), String> {
+fn save_containers<R: Runtime>(app: &tauri::AppHandle<R>, containers: &[Container]) -> Result<(), String> {
     let file_path = get_containers_file(app);
     
     // Ensure directory exists
@@ -437,7 +437,7 @@ fn save_containers<R: Runtime>(app: &tauri::AppHandle<R>, containers: &[DockerCo
     Ok(())
 }
 
-fn load_containers<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<Vec<DockerContainer>, String> {
+fn load_containers<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<Vec<Container>, String> {
     let file_path = get_containers_file(app);
     
     if !file_path.exists() {
@@ -452,24 +452,49 @@ fn load_containers<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<Vec<DockerCo
 }
 
 #[tauri::command]
-async fn create_agent_container(app_handle: tauri::AppHandle, agent_id: String, agent_type: String, number: i32, message_ids: Vec<String>) -> Result<DockerContainer, String> {
+async fn create_agent_container(app_handle: tauri::AppHandle, agent_id: String, agent_type: String, number: i32, message_ids: Vec<String>) -> Result<Container, String> {
     println!("Creating agent with id: {}, type: {}, number: {}, message_ids: {:?}", agent_id, agent_type, number, message_ids);
     let ports = get_available_ports()?;
     let vnc_port = ports[0];
     let novnc_port = ports[1];
 
-    // Check if Docker daemon is running
-    let docker_check = Command::new("docker")
+    // Check if Podman daemon is running
+    println!("Checking podman status...");
+    let podman_check = Command::new("podman")
         .args(&["info"])
         .output()
-        .map_err(|e| format!("Failed to check Docker status: {}. Is Docker running?", e))?;
+        .map_err(|e| format!("Failed to check Podman status: {}. Is Podman running?", e))?;
 
-    if !docker_check.status.success() {
-        return Err("Docker daemon is not running. Please start Docker first.".to_string());
+    if !podman_check.status.success() {
+        let stderr = String::from_utf8_lossy(&podman_check.stderr);
+        println!("Podman check failed: {}", stderr);
+        return Err("Podman daemon is not running. Please start Podman first.".to_string());
+    }
+    println!("Podman is running");
+
+    // Check for existing container with same name and remove it
+    let container_name = format!("agent-{}", agent_id);
+    println!("Checking for existing container: {}", container_name);
+    
+    let existing = Command::new("podman")
+        .args(&["ps", "-a", "--filter", &format!("name={}", container_name)])
+        .output()
+        .map_err(|e| format!("Failed to check existing containers: {}", e))?;
+
+    if !String::from_utf8_lossy(&existing.stdout).trim().is_empty() {
+        println!("Found existing container, removing it...");
+        let _ = Command::new("podman")
+            .args(&["rm", "-f", &container_name])
+            .output()
+            .map_err(|e| format!("Failed to remove existing container: {}", e))?;
+        println!("Removed existing container");
     }
 
-    // Build the Docker image
-    let build_output = Command::new("docker")
+    // Build the Podman image
+    println!("Building container image...");
+    println!("Build context: {}", env!("CARGO_MANIFEST_DIR"));
+    
+    let build_output = Command::new("podman")
         .args(&[
             "build",
             "-t",
@@ -477,45 +502,64 @@ async fn create_agent_container(app_handle: tauri::AppHandle, agent_id: String, 
             env!("CARGO_MANIFEST_DIR"),
         ])
         .output()
-        .map_err(|e| format!("Failed to execute docker build command: {}", e))?;
+        .map_err(|e| format!("Failed to execute podman build command: {}", e))?;
+
+    // Always print build output regardless of success/failure
+    let stderr = String::from_utf8_lossy(&build_output.stderr);
+    let stdout = String::from_utf8_lossy(&build_output.stdout);
+    println!("Build stdout:\n{}", stdout);
+    println!("Build stderr:\n{}", stderr);
 
     if !build_output.status.success() {
-        let stderr = String::from_utf8_lossy(&build_output.stderr);
-        let stdout = String::from_utf8_lossy(&build_output.stdout);
-        println!("Docker build failed with stderr: {}", stderr);
-        println!("Docker build stdout: {}", stdout);
-        return Err(format!("Docker build failed.\nStderr: {}\nStdout: {}", stderr, stdout));
+        return Err(format!("Podman build failed.\nStderr: {}\nStdout: {}", stderr, stdout));
     }
+    println!("Container image built successfully");
 
-    // Run the Docker container
-    let run_output = Command::new("docker")
-        .args(&[
-            "run",
-            "-d",  // Run in detached mode
-            "-e", "DISPLAY=:0",
-            "-e", &format!("CONTAINER_ID={}", agent_id),
-            "-e", &format!("ANTHROPIC_API_KEY={}", env::var("ANTHROPIC_API_KEY").unwrap()),
-            "-e", "GEOMETRY=1920x1080",
-            "-e", "HOST_IP=host.docker.internal",
-            "-p", &format!("{}:5900", vnc_port),
-            "-p", &format!("{}:6080", novnc_port),
-            "--name", &format!("agent-{}", agent_id),
-            "--add-host=host.docker.internal:host-gateway",
-            "minimal-vnc-desktop",
-        ])
+    // Run the Podman container
+    println!("Starting container...");
+    
+    // Create the formatted strings first
+    let container_id_env = format!("CONTAINER_ID={}", agent_id);
+    let api_key_env = format!("ANTHROPIC_API_KEY={}", env::var("ANTHROPIC_API_KEY").unwrap());
+    let vnc_port_mapping = format!("{}:5900", vnc_port);
+    let novnc_port_mapping = format!("{}:6080", novnc_port);
+    let container_name = format!("agent-{}", agent_id);
+
+    let run_args = vec![
+        "run",
+        "-d",  // Run in detached mode
+        "--network", "bridge",  // Explicitly use bridge networking
+        "-e", "DISPLAY=:0",
+        "-e", &container_id_env,
+        "-e", &api_key_env,
+        "-e", "GEOMETRY=1920x1080",
+        "-e", "HOST_IP=host.containers.internal",
+        "-p", &vnc_port_mapping,
+        "-p", &novnc_port_mapping,
+        "--name", &container_name,
+        // Remove the problematic --add-host flag and use DNS instead
+        "minimal-vnc-desktop",
+    ];
+    println!("Running podman with args: {:?}", run_args);
+
+    let run_output = Command::new("podman")
+        .args(&run_args)
         .output()
         .map_err(|e| e.to_string())?;
 
+    let run_stderr = String::from_utf8_lossy(&run_output.stderr);
+    let run_stdout = String::from_utf8_lossy(&run_output.stdout);
+    println!("Run stdout:\n{}", run_stdout);
+    println!("Run stderr:\n{}", run_stderr);
+
     if !run_output.status.success() {
-        let error = String::from_utf8_lossy(&run_output.stderr);
-        return Err(format!("Failed to start container: {}", error));
+        return Err(format!("Failed to start container.\nStderr: {}\nStdout: {}", run_stderr, run_stdout));
     }
 
-    let container_id = String::from_utf8_lossy(&run_output.stdout)
-        .trim()
-        .to_string();
+    let container_id = run_stdout.trim().to_string();
+    println!("Container started successfully with ID: {}", container_id);
 
-    let container = DockerContainer {
+    let container = Container {
         id: container_id,
         vnc_port: novnc_port,
         agent_id,
@@ -524,17 +568,18 @@ async fn create_agent_container(app_handle: tauri::AppHandle, agent_id: String, 
         message_ids: message_ids,
     };
 
-    let mut containers = DOCKER_CONTAINERS.lock().unwrap();
+    let mut containers = CONTAINERS.lock().unwrap();
     containers.push(container.clone());
     
     save_containers(&app_handle, &containers)?;
+    println!("Container metadata saved");
 
     Ok(container)
 }
 
 #[tauri::command]
-fn get_agent_container(agent_id: String) -> Option<DockerContainer> {
-    let containers = DOCKER_CONTAINERS.lock().unwrap();
+fn get_agent_container(agent_id: String) -> Option<Container> {
+    let containers = CONTAINERS.lock().unwrap();
     containers.iter().find(|c| c.agent_id == agent_id).cloned()
 }
 
@@ -545,17 +590,34 @@ fn get_occupied_ports() -> Vec<u16> {
 
 #[tauri::command]
 async fn cleanup_agent_container(app_handle: tauri::AppHandle, agent_id: String) -> Result<(), String> {
-    let mut containers = DOCKER_CONTAINERS.lock().unwrap();
-    if let Some(pos) = containers.iter().position(|c| c.agent_id == agent_id) {
-        let container = containers.remove(pos);
-        
-        Command::new("docker")
-            .args(&["rm", "-f", &container.id])
-            .output()
-            .map_err(|e| e.to_string())?;
-            
-        save_containers(&app_handle, &containers)?;
+    // Find the container name
+    let container_name = format!("agent-{}", agent_id);
+
+    // Stop the container
+    let stop_output = Command::new("podman")
+        .args(&["stop", &container_name])
+        .output()
+        .map_err(|e| format!("Failed to stop container: {}", e))?;
+
+    if !stop_output.status.success() {
+        println!("Warning: Failed to stop container: {}", String::from_utf8_lossy(&stop_output.stderr));
     }
+
+    // Remove the container
+    let rm_output = Command::new("podman")
+        .args(&["rm", "-f", &container_name])
+        .output()
+        .map_err(|e| format!("Failed to remove container: {}", e))?;
+
+    if !rm_output.status.success() {
+        println!("Warning: Failed to remove container: {}", String::from_utf8_lossy(&rm_output.stderr));
+    }
+
+    // Update the containers list
+    let mut containers = CONTAINERS.lock().unwrap();
+    containers.retain(|c| c.agent_id != agent_id);
+    save_containers(&app_handle, &containers)?;
+
     Ok(())
 }
 
@@ -564,7 +626,7 @@ async fn cleanup_agent_container(app_handle: tauri::AppHandle, agent_id: String)
 #[tauri::command]
 async fn start_container(container_id: String) -> Result<(), String> {
     println!("Starting container: {}", container_id);
-    tokio::process::Command::new("docker")
+    tokio::process::Command::new("podman")
         .args(&["start", &container_id])
         .output()
         .await
@@ -574,8 +636,8 @@ async fn start_container(container_id: String) -> Result<(), String> {
 
 
 #[tauri::command]
-fn get_all_containers() -> Vec<DockerContainer> {
-    let containers = DOCKER_CONTAINERS.lock().unwrap();
+fn get_all_containers() -> Vec<Container> {
+    let containers = CONTAINERS.lock().unwrap();
     containers.clone()
 }
 
@@ -611,7 +673,7 @@ fn print_all_storage() {
     println!("User data: {:?}", USER.lock().unwrap());
     println!("Occupied ports: {:?}", OCCUPIED_PORTS.lock().unwrap());
     println!("Messages: {:?}", MESSAGES.lock().unwrap());
-    println!("Docker containers: {:?}", DOCKER_CONTAINERS.lock().unwrap());
+    println!("Containers: {:?}", CONTAINERS.lock().unwrap());
 }
 
 
@@ -630,8 +692,8 @@ fn clear_all_storage(app_handle: tauri::AppHandle) {
     let mut messages = MESSAGES.lock().unwrap();
     messages.clear();
 
-    // Clear docker containers
-    let mut containers = DOCKER_CONTAINERS.lock().unwrap();
+    // Clear containers
+    let mut containers = CONTAINERS.lock().unwrap();
     containers.clear();
 
     // Save updated containers to disk
@@ -658,7 +720,7 @@ fn clear_all_storage(app_handle: tauri::AppHandle) {
 #[tauri::command]
 fn clear_all_messages(app_handle: tauri::AppHandle) {
     // Clear message IDs from containers
-    let mut containers = DOCKER_CONTAINERS.lock().unwrap();
+    let mut containers = CONTAINERS.lock().unwrap();
     for container in containers.iter_mut() {
         container.message_ids.clear();
     }
@@ -703,7 +765,7 @@ fn update_user_data(show_controls: bool) {
 
 #[tauri::command]
 fn get_agent_messages(agent_id: String) -> Vec<serde_json::Value> {
-    let containers = DOCKER_CONTAINERS.lock().unwrap();
+    let containers = CONTAINERS.lock().unwrap();
     let mut messages_array = Vec::new();
     
     if let Some(container) = containers.iter().find(|c| c.agent_id == agent_id) {
@@ -744,6 +806,77 @@ fn load_messages<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<std::collectio
         .map_err(|e| format!("Failed to parse messages file: {}", e))
 }
 
+#[cfg(target_os = "macos")]
+async fn install_homebrew() -> Result<(), String> {
+    println!("Installing Homebrew...");
+    
+    // The official Homebrew installation command
+    let install_cmd = "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"";
+    
+    let output = Command::new("bash")
+        .arg("-c")
+        .arg(install_cmd)
+        .output()
+        .map_err(|e| format!("Failed to execute Homebrew installation: {}", e))?;
+
+    if !output.status.success() {
+        let error = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to install Homebrew: {}", error));
+    }
+
+    println!("Homebrew installed successfully");
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+async fn install_podman() -> Result<(), String> {
+    // Check if brew is installed
+    let brew_check = Command::new("which")
+        .arg("brew")
+        .output()
+        .map_err(|e| format!("Failed to check for brew: {}", e))?;
+
+    if !brew_check.status.success() {
+        println!("Homebrew not found, installing it first...");
+        install_homebrew().await?;
+        
+        // Double check brew is now available
+        let brew_recheck = Command::new("which")
+            .arg("brew")
+            .output()
+            .map_err(|e| format!("Failed to check for brew after installation: {}", e))?;
+            
+        if !brew_recheck.status.success() {
+            return Err("Failed to install Homebrew properly".to_string());
+        }
+    }
+
+    // Install podman using brew
+    println!("Installing podman...");
+    let install_output = Command::new("brew")
+        .args(&["install", "podman"])
+        .output()
+        .map_err(|e| format!("Failed to install podman: {}", e))?;
+
+    if !install_output.status.success() {
+        let error = String::from_utf8_lossy(&install_output.stderr);
+        return Err(format!("Failed to install podman: {}", error));
+    }
+
+    println!("Podman installed successfully");
+    Ok(())
+}
+
+// Add this function to check for podman
+async fn check_podman() -> Result<bool, String> {
+    let output = Command::new("podman")
+        .args(&["--version"])
+        .output()
+        .map_err(|_| "Failed to execute podman command".to_string())?;
+
+    Ok(output.status.success())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     dotenv().ok();
@@ -754,9 +887,24 @@ pub fn run() {
             // Store the app handle globally
             *APP_HANDLE.lock().unwrap() = Some(app.handle().clone());
 
+            // Check for podman and install if needed
+            tauri::async_runtime::block_on(async {
+                match check_podman().await {
+                    Ok(true) => println!("Podman is already installed"),
+                    Ok(false) => {
+                        println!("Podman not found, attempting to install...");
+                        match install_podman().await {
+                            Ok(_) => println!("Successfully installed podman"),
+                            Err(e) => eprintln!("Failed to install podman: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("Error checking for podman: {}", e),
+                }
+            });
+
             // Load containers on startup
             if let Ok(containers) = load_containers(&app.handle()) {
-                let mut stored_containers = DOCKER_CONTAINERS.lock().unwrap();
+                let mut stored_containers = CONTAINERS.lock().unwrap();
                 *stored_containers = containers;
             }
 

@@ -20,7 +20,7 @@ export interface BaseContainer {
   agent_id: string;
 }
 
-export interface DockerContainer extends BaseContainer {
+export interface Container extends BaseContainer {
   id: string;
   vnc_port: number;
 }
@@ -30,7 +30,7 @@ export interface BuildingContainer extends BaseContainer {
   error: string | null;
 }
 
-export type Agent = DockerContainer | BuildingContainer;
+export type Agent = Container | BuildingContainer;
 
 export interface BaseMessage {
   show_ui?: boolean;
@@ -79,7 +79,7 @@ export default function App() {
 
   async function loadExistingAgents() {
     try {
-      const containers = await core.invoke<DockerContainer[]>('get_all_containers');
+      const containers = await core.invoke<Container[]>('get_all_containers');
       setAgents(containers);
       if (containers.length > 0) return setSelectedAgentId(containers[0].agent_id);
       setSelectedAgentId(null);
@@ -97,7 +97,7 @@ export default function App() {
     setAgents([...agents, newAgent]);
     setSelectedAgentId(newAgent.agent_id);
     try {
-      const containerInfo = await core.invoke<DockerContainer>('create_agent_container', {
+      const containerInfo = await core.invoke<Container>('create_agent_container', {
         agentId: newAgent.agent_id,
         agentType: selectedAssistant as 'jim' | 'pam',
         number: newAgent.number,
