@@ -1,4 +1,4 @@
-Radah is an application to interact with computer control AI agents. Radah is maintained by [RadahAI](https://radah.ai), you can see a demo on the website.
+Radah is an application to interact with computer control AI agents. Radah is maintained by [Radah](https://radah.ai), you can see a demo on the website.
 
 Agents in Radah have full control of their own desktop environments with various applications that an agent can use to do tasks.
 
@@ -29,9 +29,9 @@ Wait a few seconds and the Radah application should open.
 
 # Contributing
 
-This application is open source because we think developers as well as RadahAI could both benefit from it. However, RadahAI will release closed source products based on technology we open source.
+This application is not open source.
 
-To start contributing join the community [discord server](https://discord.gg/JyhGGfsqHj) and know that:
+To start contributing join the contributors [discord server](https://discord.gg/dFPAyMXsvb) and know that:
 
 * At the moment we are focusing on building the following 3 components: the frontend, the agent environment(s), and the agents.
 
