@@ -15,7 +15,7 @@ import { Switch } from "./ui/switch";
 import { User } from "@/App";
 import { Agent } from "@/App";
 import { core } from "@tauri-apps/api";
-
+import { useError } from "@/hooks/ErrorContext";
 interface AppSidebarProps {
   agents: Agent[];
   user: User | undefined;
@@ -26,12 +26,17 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ agents, onNewAgentClick, selectedAgentId, onAgentSelect, user, setUser }: AppSidebarProps) {
+  const { setError } = useError();
 
   async function toggleSwitch() {
     if (!user) return;
     const newUser = { ...user, show_controls: !user.show_controls };
     setUser(newUser);
-    core.invoke('update_user_data', { showControls: !user.show_controls });
+    try {
+      await core.invoke('update_user_data', { showControls: !user.show_controls });
+    } catch {
+      setError({ primaryMessage: "Oops! We failed to update your setting. Refresh and try again.", timeout: 5000, type: 'warning' });
+    }
   }
   return (
     <Sidebar>

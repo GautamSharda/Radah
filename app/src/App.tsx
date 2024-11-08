@@ -5,6 +5,8 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { RightSidebarProvider } from "@/components/RightSidebar"
 import RenderCard from "./components/RenderCard";
 import AgentSection from "./components/AgentSection";
+import { useError } from "./hooks/ErrorContext";
+import Alert from "./components/helpers/Alert";
 
 export interface User {
   show_controls: boolean;
@@ -46,13 +48,14 @@ export interface Message extends BaseMessage {
 };
 
 export default function App() {
+  const { error, setError } = useError();
   const [step, setStep] = useState<number | null>(null);
   const [selectedAssistant, setSelectedAssistant] = useState<string | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [user, setUser] = useState<User | undefined>(undefined);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  // WebSocket
 
+  // WebSocket
   const currentAgent = selectedAgentId ? agents.find(agent => agent.agent_id === selectedAgentId) || undefined : undefined;
 
 
@@ -64,13 +67,13 @@ export default function App() {
   async function loadUser() {
     try {
       const user = await core.invoke<User>('get_user_data');
-      // await core.invoke<User>('clear_all_storage');
+      // await core.invoke<User>('clear_all_storage')
       // await core.invoke<User>('print_all_storage');
       // await core.invoke<User>('clear_all_messages');
       // await core.invoke<User>('print_all_storage');
       setUser(user);
     } catch (error) {
-      console.error('Failed to get user:', error);
+      setError({ primaryMessage: "We had an issue loading your settings", timeout: 2500, type: 'warning' });
     }
   }
 
@@ -82,7 +85,7 @@ export default function App() {
       setSelectedAgentId(null);
       setStep(0);
     } catch (error) {
-      console.error('Failed to load existing agents:', error);
+      setError({ primaryMessage: "Oops! We had an issue getting your agents. Refresh and try again.", timeout: 5000 });
     }
   }
 
@@ -106,29 +109,38 @@ export default function App() {
       });
     } catch {
       setAgents((agents).map(agent => agent.agent_id === newAgent.agent_id ? { ...newAgent, error: 'Failed to create container', loading: false } : agent));
+      setError({ primaryMessage: "Oops! We had an issue creating your agent. Try creating one again or reach out to support.", timeout: 7500 });
     }
   };
 
 
   return (
-    <SidebarProvider>
-      <RightSidebarProvider>
-        <div className="flex h-screen w-screen">
-          <AppSidebar
-            agents={agents}
-            onNewAgentClick={() => {
-              setStep(0);
-              setSelectedAssistant(null);
-            }}
-            selectedAgentId={selectedAgentId}
-            onAgentSelect={setSelectedAgentId}
-            user={user}
-            setUser={setUser}
-          />
-          <AgentSection user={user} currentAgent={currentAgent} />
+    <>
+      {error &&
+        <div className="alertComponentWrapper">
+          <Alert primaryMessage={error.primaryMessage} secondaryMessage={error.secondaryMessage} type={error.type} />
         </div>
-        {step !== null && <RenderCard step={step} setStep={setStep} selectedAssistant={selectedAssistant} setSelectedAssistant={setSelectedAssistant} handleCreateAssistant={handleCreateAssistant} />}
-      </RightSidebarProvider>
-    </SidebarProvider>
+      }
+      <SidebarProvider>
+        <RightSidebarProvider>
+          <div className="flex h-screen w-screen">
+            <AppSidebar
+              agents={agents}
+              onNewAgentClick={() => {
+                setStep(0);
+                setSelectedAssistant(null);
+              }}
+              selectedAgentId={selectedAgentId}
+              onAgentSelect={setSelectedAgentId}
+              user={user}
+              setUser={setUser}
+            />
+            <AgentSection user={user} currentAgent={currentAgent} />
+          </div>
+          {step !== null && <RenderCard step={step} setStep={setStep} selectedAssistant={selectedAssistant} setSelectedAssistant={setSelectedAssistant} handleCreateAssistant={handleCreateAssistant} />}
+        </RightSidebarProvider>
+      </SidebarProvider>
+    </>
+
   )
 }
