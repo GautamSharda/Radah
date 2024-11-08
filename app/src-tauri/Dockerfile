@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM docker.io/library/ubuntu:22.04
 
 # Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -81,7 +81,7 @@ EXPOSE 6080
 
 # Add environment variables
 ENV CONTAINER_ID=""
-ENV HOST_IP="host.docker.internal"
+ENV HOST_IP="host.containers.internal"
 ENV ANTHROPIC_API_KEY=""
 
 # Modify the CMD to accept container ID, host IP, and API key
