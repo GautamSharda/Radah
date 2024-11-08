@@ -17,8 +17,15 @@ use futures::{StreamExt};
 use tokio::sync::Mutex as AsyncMutex;
 use futures::SinkExt; // Add this line
 
+// Add these imports for TLS support
+use tokio_rustls::rustls::{Certificate, PrivateKey, ServerConfig};
+use std::fs::File;
+use std::io::BufReader;
 
-//Long Term Storage
+// Add this import for the echo endpoint
+use warp::hyper::body::Bytes;
+
+// Long Term Storage
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct User {
     //boolean value to hide or show computer controls
@@ -83,15 +90,43 @@ async fn start_websocket_server() {
     let app_handle = get_app_handle().expect("Failed to get app handle");
     let app_handle = warp::any().map(move || app_handle.clone());
 
-    let routes = warp::path("ws")
+    // WebSocket route
+    let ws_route = warp::path("ws")
         .and(warp::ws())
-        .and(app_handle)
+        .and(app_handle.clone())
         .map(|ws: warp::ws::Ws, handle| {
             ws.on_upgrade(move |socket| handle_websocket(socket, handle))
         });
 
-    println!("WebSocket server starting on ws://127.0.0.1:3030/ws");
-    warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
+    // Echo endpoint - accepts both GET and POST requests
+    let echo_route = warp::path("echo")
+        .and(warp::body::bytes())
+        .and(warp::header::headers_cloned())
+        .map(|body: Bytes, headers| {
+
+            //this endpoint is no longer in use
+
+            //print the body
+            println!("Echo endpoint hit! Body: {}", String::from_utf8_lossy(&body));
+
+            //body contains agent_id
+            let agent_id = String::from_utf8_lossy(&body).to_string();
+            
+            //get recent messages for this agent
+            let messages = get_recent_agent_messages(agent_id, 5);
+            
+            warp::reply::json(&messages)
+        });
+
+    // Combine routes
+    let routes = ws_route.or(echo_route);
+
+    println!("Server starting on http://0.0.0.0:3030");
+    println!("WebSocket endpoint: ws://0.0.0.0:3030/ws");
+    println!("Echo endpoint: http://0.0.0.0:3030/echo");
+
+    // Bind to all interfaces (0.0.0.0) instead of just localhost
+    warp::serve(routes).run(([0, 0, 0, 0], 3030)).await;
 }
 
 //Handle websocket connections

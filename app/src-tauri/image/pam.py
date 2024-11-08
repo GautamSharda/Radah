@@ -3,6 +3,7 @@ Agentic sampling loop that calls the Anthropic API and local implementation of a
 """
 
 import platform
+import asyncio
 from collections.abc import Callable
 from datetime import datetime
 import enum
@@ -53,6 +54,12 @@ PROVIDER_TO_DEFAULT_MODEL_NAME: dict[APIProvider, str] = {
 }
 
 
+
+
+#Radah code, for mocking data
+LOREM_IPSUM = """Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."""
+# LOREM_IPSUM = LOREM_IPSUM * 1000
+
 # This system prompt is optimized for the Docker environment in this repository and
 # specific tool combinations enabled.
 # We encourage modifying this system prompt to ensure the model has context for the
@@ -102,6 +109,7 @@ async def sampling_loop(
     max_tokens: int = 4096,
     message_queue: deque = deque(),
     get_prompt_running: Callable[[], str] = lambda: "running",
+    MOCKDATA: bool = False,
 ):
     """
     Agentic sampling loop for the assistant/tool interaction of computer use.
@@ -116,11 +124,29 @@ async def sampling_loop(
         text=f"{SYSTEM_PROMPT}{' ' + system_prompt_suffix if system_prompt_suffix else ''}",
     )
 
+    mockLoopsRemaining = 5
+
     while True:
+        # ---- radah code start ----
         prompt_running = get_prompt_running()
 
         if prompt_running != "running":
             return messages
+        
+        if MOCKDATA:
+            mockLoopsRemaining -= 1
+            await asyncio.sleep(1)
+            message_queue.append({"show_ui": False, "message-type": "message", "agent-message": LOREM_IPSUM})
+
+            new_message = {"show_ui": True, "message-type": "message", "agent-output": {"type": "text", "text": LOREM_IPSUM}}
+            message_queue.append(new_message)
+
+            if mockLoopsRemaining <= 0:
+                MOCKDATA = False
+                return messages
+            continue
+
+        # ---- radah code end ----
 
         enable_prompt_caching = False
         betas = [COMPUTER_USE_BETA_FLAG]
@@ -329,7 +355,7 @@ def _maybe_prepend_system_tool_result(result: ToolResult, result_text: str):
         result_text = f"<system>{result.system}</system>\n{result_text}"
     return result_text
 
-async def run_pam(message_queue = deque(), prompt: str = "", previous_messages: list[BetaMessageParam] = [], get_prompt_running = lambda: "running"):  # Need to make this async since sampling_loop is async
+async def run_pam(message_queue = deque(), prompt: str = "", previous_messages: list[BetaMessageParam] = [], get_prompt_running = lambda: "running", MOCKDATA = False):  # Need to make this async since sampling_loop is async
     initial_messages = {"role": "user", "content": prompt}
     previous_messages = previous_messages + [initial_messages]
     message_queue.append({"show_ui": False, "message-type": "message", "agent-message": initial_messages})
@@ -390,11 +416,11 @@ async def run_pam(message_queue = deque(), prompt: str = "", previous_messages: 
         api_response_callback=api_response_callback,
         api_key=os.getenv("ANTHROPIC_API_KEY"),
         get_prompt_running=get_prompt_running,
-        message_queue=message_queue
+        message_queue=message_queue,
+        MOCKDATA=MOCKDATA
     )
 
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(run_pam(deque(), "Open Safari using spotlight search. ONLY TAKE ONE ACTION / TOOL USE PER RESPONSE. DO NOT SEND A BUNCH OF ACTIONS AT ONCE."))
 

@@ -2,11 +2,13 @@ import websockets
 import json
 import asyncio
 import os
+import aiohttp
 from collections import deque
 from pam import run_pam
 
 #Config
 HEARTBEAT = False
+MOCKDATA = False
 
 # Global variables
 prompt_running = ["stopped"] #"running", "stopped", "loading", "na"
@@ -24,9 +26,10 @@ if not HOST_IP:
 
 
 def get_prompt_running():
-    print('we have hit global prompt running')
-    print(f'prompt running: {prompt_running[0]}')
     return prompt_running[0]
+
+
+
 
 async def main(agent_id):
     # Run both coroutines concurrently using asyncio.gather()
@@ -35,7 +38,7 @@ async def main(agent_id):
 async def run_websocket_client(message_queue, agent_id):
     # Global websocket connection
     ws_connection = None
-    
+
     async def connect():
         nonlocal ws_connection
         retry_delay = 1  # Initial delay in seconds
@@ -62,11 +65,12 @@ async def run_websocket_client(message_queue, agent_id):
             if json_message["message-type"] != "prompt" or prompt_running[0] != "stopped" or "text" not in json_message:
                 return
             prompt_running[0] = "running"
-            #format all recent messages as an array of messages
+
             recent_messages = [message["agent-message"] for message in json_message.get("recent-messages", []) if "agent-message" in message]
+
             try:
                 #This is where the magic happens
-                await run_pam(message_queue, json_message["text"], recent_messages, get_prompt_running)
+                await run_pam(message_queue, json_message["text"], recent_messages, get_prompt_running, MOCKDATA)
             except Exception as e:
                 message_queue.append({"message-type": "message", "text": f"Error running Pam: {str(e)}", "error": True, "show_ui": True })
                 print(f"Error running Pam: {e}")
@@ -100,11 +104,33 @@ async def run_websocket_client(message_queue, agent_id):
                 ws_connection = await connect()
 
     async def process_queue():
+
+
+        def doesMessageNotHaveAnImage(message):
+            try:
+                if "content" in message:
+                    res = True
+                    for sub_message in message["content"]:
+                        if not doesMessageNotHaveAnImage(sub_message):
+                            return False
+                    return res
+                elif "type" in message and message["type"] == "image":
+                    return False
+                else:
+                    return True
+            except Exception as e:
+                return True
+
+
         nonlocal ws_connection
         while True:
             if ws_connection and message_queue:
                 try:
                     message = message_queue[0]  # Peek at first message
+                    if 'agent-message' in message and not doesMessageNotHaveAnImage(message['agent-message']):
+                        print('invalid message being popped')
+                        message_queue.popleft()
+                        continue
                     json_message = json.dumps(message)
                     await ws_connection.send(json_message)
                     message_queue.popleft()  # Only remove after successful send
@@ -136,3 +162,18 @@ if __name__ == "__main__":
         agent_id = "pam-1"
     asyncio.run(main(agent_id))
     print("App finished")
+
+
+
+
+
+# async def getRecentMessage(message):
+#     print(f"Getting recent message for {message}")
+#     try:
+#         async with aiohttp.ClientSession() as session:
+#             async with session.post(f'http://{HOST_IP}:3030/echo', data=message) as response:
+#                 print(f"Recent message response: {response}")
+#                 return await response.json()
+#     except Exception as e:
+#         print(f"Error getting recent message: {e}")
+#         return []

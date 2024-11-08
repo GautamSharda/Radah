@@ -18,6 +18,8 @@ interface RightSidebarProps {
 
 export function RightSidebar({ messages, agentId, sendMessage, promptRunning, stopAgent, isWebSocketOpen }: RightSidebarProps) {
   const { isOpen } = useRightSidebar()
+  const prevHeightRef = useRef(0);
+  const prevMessagesLengthRef = useRef(0);
 
   const usedMessageIDSet = new Set<string>();
   const uniqueMessages = messages
@@ -28,16 +30,40 @@ export function RightSidebar({ messages, agentId, sendMessage, promptRunning, st
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+
+  useEffect(() => {
+    prevHeightRef.current = 0;
+    prevMessagesLengthRef.current = 0;
+  }, [agentId]);
+
   useEffect(() => {
     const div = messagesEndRef.current;
     if (div) {
-      const isNearBottom = div.scrollHeight - div.scrollTop <= div.clientHeight + 50; // 50px threshold
-      if (!isNearBottom) {
-        div.style.transition = 'scroll-top 0.3s ease-in-out';
-        div.scrollTop = div.scrollHeight;
+      const shouldScrollDown = prevHeightRef.current - (div.scrollTop + div.clientHeight) <= 200;
+      prevHeightRef.current = div.scrollHeight;
+      if (shouldScrollDown || prevHeightRef.current === 0) {
+        scrollToBottom();
       }
+      prevMessagesLengthRef.current = uniqueMessages.length;
     }
+    // if the last element of unique messages has a message-type of "prompt", scroll to bottom
+    if (uniqueMessages.length > 0 && uniqueMessages[uniqueMessages.length - 1]['message-type'] === 'prompt') {
+      scrollToBottom();
+    }
+
   }, [uniqueMessages.length]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [agentId]);
+
+  function scrollToBottom() {
+    const div = messagesEndRef.current;
+    if (div) {
+      div.scrollTop = div.scrollHeight;
+    }
+  }
+
 
   return (
     <div
