@@ -1,0 +1,4 @@
+#Copy this file to .env and fill in the values
+
+#Anthropic API Key (this is a fake key btw)
+ANTHROPIC_API_KEY=fake-api-key
