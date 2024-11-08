@@ -45,6 +45,7 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
         if (!agentId) return;
         let localWS: WebSocket | null = null;
         let reconnectAttempt = 0;
+        let closing = false;
         const maxReconnectDelay = 30000; // Maximum delay of 30 seconds
         const baseDelay = 1000; // Start with 1 second delay
 
@@ -59,29 +60,20 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
             });
 
             localWS.addEventListener('message', (event) => {
-                console.log('WebSocket message received:');
                 const message = JSON.parse(event.data);
-                console.log(message);
                 //TODO: Fix this (it is needed to manage multiple agents)
-                // if (message.agent_id && message.agent_id !== agentId) return;
-                if (message.prompt_running) {
-                    console.log('setting prompt running to', message.prompt_running);
-                    setPromptRunning(message.prompt_running as promptRunningType);
-                }
+                if (message.agent_id && message.agent_id !== agentId) return;
+                if (message.prompt_running) setPromptRunning(message.prompt_running as promptRunningType);
                 setMessages(prevMessages => [...prevMessages, message]);
-            });
-
-            localWS.addEventListener('close', () => {
-                // Calculate exponential backoff with jitter
-                setIsWebSocketOpen(false);
-                setTimeout(() => {
-                    reconnectAttempt++;
-                    connect();
-                }, Math.min(Math.floor(baseDelay * Math.pow(2, reconnectAttempt) * (0.5 + Math.random())), maxReconnectDelay));
             });
 
             localWS.addEventListener('error', () => {
                 setIsWebSocketOpen(false);
+                setTimeout(() => {
+                    if (closing) return;
+                    reconnectAttempt++;
+                    connect();
+                }, Math.min(Math.floor(baseDelay * Math.pow(2, reconnectAttempt) * (0.5 + Math.random())), maxReconnectDelay));
             });
         };
         connect();
@@ -89,6 +81,7 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
         // Cleanup function
         return () => {
             if (localWS) {
+                closing = true;
                 localWS.close();
                 setWs(null);
             }

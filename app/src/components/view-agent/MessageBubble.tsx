@@ -3,7 +3,6 @@ import { Message } from "@/App";
 
 const bubbleStyle = "px-4 py-2 rounded-3xl";
 
-
 function InputActionSwitch(action: string): string {
     switch (action) {
         case "mouse_move":
