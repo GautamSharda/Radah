@@ -10,7 +10,7 @@ Because Radah aims to run on many platforms, it is a [Tauri](https://tauri.app/)
 
 To run Radah, make sure you have Docker installed and running on your system.
 
-In `src/-tauri` create a `.env` file with the same keys that are listed in in `.env.example`.
+In `src/-tauri` create a `.env` file. Use the env template listed in `.envexample`.
 
 Then, run the following commands:
 
