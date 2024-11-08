@@ -36,7 +36,7 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
         setPromptRunning("loading");
         setIsWebSocketOpen(false);
         setSwitchingAgent(true);
-    }, [agentId]);
+    }, [currentAgent]);
 
     function sendMessage(message: string) {
         if (ws && ws.readyState === WebSocket.OPEN) ws.send(message);

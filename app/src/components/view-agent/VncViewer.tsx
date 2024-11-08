@@ -22,19 +22,6 @@ const getVncUrl = (port: number, view_only: boolean, agentId: string) => {
 
 export function VncViewer({ showControls, agent, switchingAgent }: VncViewerProps) {
 
-  if (switchingAgent) {
-    return (
-      <div className='w-full aspect-w-16 aspect-h-9 border-2 rounded-lg flex justify-center items-center bg-slate-50 min-h-[150px]'>
-        <div className="h-full flex justify-center items-center w-full px-4">
-          <div className="flex flex-col gap-2">
-            <p className="text-slate-900 font-bold mb-4">Switching to new agent...</p>
-            <Spinner size="medium" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   if ((agent as BuildingContainer).loading) {
     return (
       <div className='w-full aspect-w-16 aspect-h-9 border-2 rounded-lg flex justify-center items-center bg-slate-50 min-h-[250px]'>
@@ -59,6 +46,20 @@ export function VncViewer({ showControls, agent, switchingAgent }: VncViewerProp
       </div>
     );
   }
+
+  if (switchingAgent) {
+    return (
+      <div className='w-full aspect-w-16 aspect-h-9 border-2 rounded-lg flex justify-center items-center bg-slate-50 min-h-[150px]'>
+        <div className="h-full flex justify-center items-center w-full px-4">
+          <div className="flex flex-col gap-2">
+            <p className="text-slate-900 font-bold mb-4">Switching to new agent...</p>
+            <Spinner size="medium" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const vncUrl = getVncUrl((agent as DockerContainer).vnc_port, !showControls, agent.agent_id);
 
   return (
