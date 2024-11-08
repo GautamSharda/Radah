@@ -709,6 +709,77 @@ fn load_messages<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<std::collectio
         .map_err(|e| format!("Failed to parse messages file: {}", e))
 }
 
+#[cfg(target_os = "macos")]
+async fn install_homebrew() -> Result<(), String> {
+    println!("Installing Homebrew...");
+    
+    // The official Homebrew installation command
+    let install_cmd = "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"";
+    
+    let output = Command::new("bash")
+        .arg("-c")
+        .arg(install_cmd)
+        .output()
+        .map_err(|e| format!("Failed to execute Homebrew installation: {}", e))?;
+
+    if !output.status.success() {
+        let error = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to install Homebrew: {}", error));
+    }
+
+    println!("Homebrew installed successfully");
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+async fn install_podman() -> Result<(), String> {
+    // Check if brew is installed
+    let brew_check = Command::new("which")
+        .arg("brew")
+        .output()
+        .map_err(|e| format!("Failed to check for brew: {}", e))?;
+
+    if !brew_check.status.success() {
+        println!("Homebrew not found, installing it first...");
+        install_homebrew().await?;
+        
+        // Double check brew is now available
+        let brew_recheck = Command::new("which")
+            .arg("brew")
+            .output()
+            .map_err(|e| format!("Failed to check for brew after installation: {}", e))?;
+            
+        if !brew_recheck.status.success() {
+            return Err("Failed to install Homebrew properly".to_string());
+        }
+    }
+
+    // Install podman using brew
+    println!("Installing podman...");
+    let install_output = Command::new("brew")
+        .args(&["install", "podman"])
+        .output()
+        .map_err(|e| format!("Failed to install podman: {}", e))?;
+
+    if !install_output.status.success() {
+        let error = String::from_utf8_lossy(&install_output.stderr);
+        return Err(format!("Failed to install podman: {}", error));
+    }
+
+    println!("Podman installed successfully");
+    Ok(())
+}
+
+// Add this function to check for podman
+async fn check_podman() -> Result<bool, String> {
+    let output = Command::new("podman")
+        .args(&["--version"])
+        .output()
+        .map_err(|_| "Failed to execute podman command".to_string())?;
+
+    Ok(output.status.success())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     dotenv().ok();
@@ -718,6 +789,21 @@ pub fn run() {
         .setup(|app| {
             // Store the app handle globally
             *APP_HANDLE.lock().unwrap() = Some(app.handle().clone());
+
+            // Check for podman and install if needed
+            tauri::async_runtime::block_on(async {
+                match check_podman().await {
+                    Ok(true) => println!("Podman is already installed"),
+                    Ok(false) => {
+                        println!("Podman not found, attempting to install...");
+                        match install_podman().await {
+                            Ok(_) => println!("Successfully installed podman"),
+                            Err(e) => eprintln!("Failed to install podman: {}", e),
+                        }
+                    }
+                    Err(e) => eprintln!("Error checking for podman: {}", e),
+                }
+            });
 
             // Load containers on startup
             if let Ok(containers) = load_containers(&app.handle()) {
