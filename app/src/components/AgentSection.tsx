@@ -10,13 +10,13 @@ interface AgentProps {
     currentAgent: Agent | undefined;
 }
 
-export type promptRunningType = "running" | "stopped" | "loading";
+export type promptRunningType = "running" | "stopped" | "loading" | "na";
 
 export default function AgentSection({ user, currentAgent }: AgentProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [ws, setWs] = useState<WebSocket | null>(null);
     const [isWebSocketOpen, setIsWebSocketOpen] = useState<boolean>(false);
-    const [promptRunning, setPromptRunning] = useState<promptRunningType>("loading");
+    const [promptRunning, setPromptRunning] = useState<promptRunningType>("na");
     const [switchingAgent, setSwitchingAgent] = useState<boolean>(true);
     const agentId = currentAgent?.agent_id;
     useEffect(() => {
@@ -30,11 +30,9 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
             const promptRunning = await core.invoke<string>('get_prompt_running', { agentId });
             setPromptRunning(promptRunning as promptRunningType);
             setSwitchingAgent(false);
-
         };
         loadAgent();
-        setPromptRunning("loading");
-        setIsWebSocketOpen(false);
+        setPromptRunning("na");
         setSwitchingAgent(true);
     }, [currentAgent]);
 
@@ -66,7 +64,10 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
                 console.log(message);
                 //TODO: Fix this (it is needed to manage multiple agents)
                 // if (message.agent_id && message.agent_id !== agentId) return;
-                if (message.prompt_running) setPromptRunning(message.prompt_running as promptRunningType);
+                if (message.prompt_running) {
+                    console.log('setting prompt running to', message.prompt_running);
+                    setPromptRunning(message.prompt_running as promptRunningType);
+                }
                 setMessages(prevMessages => [...prevMessages, message]);
             });
 

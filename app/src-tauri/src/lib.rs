@@ -60,7 +60,7 @@ static CLIENT_CONNECTION: Lazy<Arc<AsyncMutex<Option<Arc<AsyncMutex<futures::str
 #[derive(Debug)]
 struct ConnectionInfo {
     tx: Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>,
-    prompt_running: String, //"running", "stopped", "loading"
+    prompt_running: String, //"running", "stopped", "loading", "na"
 }
 
 // Global connection maps using Arc<AsyncMutex>
@@ -140,7 +140,7 @@ async fn handle_disconnection(conn_id: &str) {
         // Now we can safely update the connection info
         agent_conns.insert(agent_id.to_string(), ConnectionInfo {
             tx,
-            prompt_running: "loading".to_string(),
+            prompt_running: "na".to_string(),
         });
 
 
@@ -148,7 +148,7 @@ async fn handle_disconnection(conn_id: &str) {
         if let Some(client_conn) = CLIENT_CONNECTION.lock().await.as_ref() {
             let message = serde_json::json!({
                 "agent_id": agent_id,
-                "prompt_running": "loading"
+                "prompt_running": "na"
             });
             let json_string = serde_json::to_string(&message).unwrap();
             if let Err(e) = client_conn.lock().await.send(warp::ws::Message::text(json_string)).await {
@@ -293,7 +293,7 @@ async fn handle_client_message(_conn_id: &str, _tx: &Arc<AsyncMutex<futures::str
 
 #[tauri::command]
 async fn get_prompt_running(agent_id: String) -> String {
-    AGENT_CONNECTIONS.lock().await.get(&agent_id).map(|conn| conn.prompt_running.clone()).unwrap_or("loading".to_string())
+    AGENT_CONNECTIONS.lock().await.get(&agent_id).map(|conn| conn.prompt_running.clone()).unwrap_or("na".to_string())
 }
 
 fn get_recent_agent_messages(agent_id: String, n: usize) -> Vec<serde_json::Value> {

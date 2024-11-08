@@ -9,7 +9,7 @@ from pam import run_pam
 HEARTBEAT = False
 
 # Global variables
-prompt_running = ["stopped"] #"running", "stopped", "loading"
+prompt_running = ["stopped"] #"running", "stopped", "loading", "na"
 # Global message queue
 message_queue = deque()
 
@@ -46,7 +46,7 @@ async def run_websocket_client(message_queue, agent_id):
                 ws_connection = await websockets.connect(f'ws://{HOST_IP}:3030/ws')
                 print(f"Successfully connected to WebSocket server at {HOST_IP}")
                 # Send initial dummy message
-                message_queue.appendleft({"connection-type": "agent", "container_id": agent_id, "message-type": "init", "prompt_running": prompt_running[0], "show_ui": False})
+                message_queue.appendleft({"connection-type": "agent", "container_id": agent_id, "agent_id": agent_id, "message-type": "init", "prompt_running": prompt_running[0], "show_ui": False})
                 return ws_connection
             except Exception as e:
                 print(f"Failed to connect to WebSocket server: {e}")

@@ -23,6 +23,28 @@ export function MessageInput({ sendMessage, promptRunning, currentAgentID, stopA
         setPrompt("");
     }, [currentAgentID])
 
+    const promptButton = () => {
+        if (promptRunning === "na" || !isWebSocketOpen) {
+            return <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center hover:cursor-not-allowed">
+            </div>
+        }
+        if (promptRunning === "stopped" && isWebSocketOpen) {
+            return <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center hover:cursor-pointer hover:bg-slate-700" onClick={sendMessageWrapper}>
+                <ArrowUpIcon className="h-5 w-5 stroke-[1.5] text-white" />
+            </div>
+        }
+        if (promptRunning === "running" && isWebSocketOpen) {
+            return <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center hover:cursor-pointer hover:bg-slate-700" onClick={stopAgent}>
+                <SquareIcon className="h-3 w-3 stroke-[1.5] text-white bg-white" />
+            </div>
+        }
+        if ((promptRunning === "loading")) {
+            return <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center hover:cursor-not-allowed">
+                <Spinner size="small" className="border-slate-800" />
+            </div>
+        }
+    }
+
     return (
         <div className="w-full flex flex-col items-start justify-start bg-slate-200 rounded-xl p-4">
             <textarea
@@ -50,21 +72,7 @@ export function MessageInput({ sendMessage, promptRunning, currentAgentID, stopA
                 }}
             />
             <div className="flex flex-row items-center justify-end w-full">
-                {promptRunning === "stopped" && isWebSocketOpen &&
-                    <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center hover:cursor-pointer hover:bg-slate-700" onClick={sendMessageWrapper}>
-                        <ArrowUpIcon className="h-5 w-5 stroke-[1.5] text-white" />
-                    </div>
-                }
-                {promptRunning === "running" && isWebSocketOpen &&
-                    <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center hover:cursor-pointer hover:bg-slate-700" onClick={stopAgent}>
-                        <SquareIcon className="h-3 w-3 stroke-[1.5] text-white bg-white" />
-                    </div>
-                }
-                {(promptRunning === "loading" || !isWebSocketOpen) &&
-                    <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center hover:cursor-not-allowed">
-                        <Spinner size="small" className="border-slate-800" />
-                    </div>
-                }
+                {promptButton()}
             </div>
         </div>
     )
