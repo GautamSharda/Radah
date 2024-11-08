@@ -582,7 +582,7 @@ fn print_all_storage() {
 
 //Clear all storage (only used for testing)
 #[tauri::command]
-fn clear_all_storage() {
+fn clear_all_storage(app_handle: tauri::AppHandle) {
     // Clear user data
     let mut user = USER.lock().unwrap();
     user.show_controls = true; // Reset to default
@@ -598,6 +598,25 @@ fn clear_all_storage() {
     // Clear docker containers
     let mut containers = DOCKER_CONTAINERS.lock().unwrap();
     containers.clear();
+
+    // Save updated containers to disk
+    let containers_file = app_handle.path().app_data_dir()
+        .expect("Failed to get app data dir")
+        .join("containers.json");
+    
+    if let Ok(json) = serde_json::to_string(&*containers) {
+        if let Err(e) = std::fs::write(&containers_file, json) {
+            eprintln!("Failed to save containers file: {}", e);
+        }
+    }
+
+    // Save messages to disk
+    let messages_file = get_messages_file(&app_handle);
+    if let Ok(json) = serde_json::to_string(&*messages) {
+        if let Err(e) = std::fs::write(&messages_file, json) {
+            eprintln!("Failed to save messages file: {}", e);
+        }
+    }
 }
 
 // Clear all messages and message IDs in the containers
