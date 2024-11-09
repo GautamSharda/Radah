@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import Spinner from "@/components/ui/spinner.tsx";
 import { Agent, BuildingContainer, Container } from '@/App';
 interface VncViewerProps {
