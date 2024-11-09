@@ -864,6 +864,32 @@ async fn install_podman() -> Result<(), String> {
     }
 
     println!("Podman installed successfully");
+
+    // Initialize podman machine
+    println!("Initializing podman machine...");
+    let init_output = Command::new("podman")
+        .args(&["machine", "init"])
+        .output()
+        .map_err(|e| format!("Failed to initialize podman machine: {}", e))?;
+
+    if !init_output.status.success() {
+        let error = String::from_utf8_lossy(&init_output.stderr);
+        return Err(format!("Failed to initialize podman machine: {}", error));
+    }
+
+    // Start podman machine
+    println!("Starting podman machine...");
+    let start_output = Command::new("podman")
+        .args(&["machine", "start"])
+        .output()
+        .map_err(|e| format!("Failed to start podman machine: {}", e))?;
+
+    if !start_output.status.success() {
+        let error = String::from_utf8_lossy(&start_output.stderr);
+        return Err(format!("Failed to start podman machine: {}", error));
+    }
+
+    println!("Podman machine started successfully");
     Ok(())
 }
 
