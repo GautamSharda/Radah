@@ -871,10 +871,19 @@ async fn install_podman() -> Result<(), String> {
 async fn check_podman() -> Result<bool, String> {
     let output = Command::new("podman")
         .args(&["--version"])
-        .output()
-        .map_err(|_| "Failed to execute podman command".to_string())?;
-
-    Ok(output.status.success())
+        .output();
+    
+    match output {
+        Ok(output) => Ok(output.status.success()),
+        Err(e) => {
+            // If command not found, return Ok(false) instead of an error
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Ok(false)
+            } else {
+                Err(format!("Error checking podman: {}", e))
+            }
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -895,10 +904,16 @@ pub fn run() {
                         println!("Podman not found, attempting to install...");
                         match install_podman().await {
                             Ok(_) => println!("Successfully installed podman"),
-                            Err(e) => eprintln!("Failed to install podman: {}", e),
+                            Err(e) => {
+                                eprintln!("Failed to install podman: {}", e);
+                                // You might want to show this error to the user via the UI
+                            }
                         }
                     }
-                    Err(e) => eprintln!("Error checking for podman: {}", e),
+                    Err(e) => {
+                        eprintln!("Unexpected error checking for podman: {}", e);
+                        // You might want to show this error to the user via the UI
+                    }
                 }
             });
 
