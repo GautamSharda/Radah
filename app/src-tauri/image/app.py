@@ -8,7 +8,7 @@ from pam import run_pam
 
 #Config
 HEARTBEAT = False
-MOCKDATA = False
+MOCKDATA = True
 
 # Global variables
 prompt_running = ["stopped"] #"running", "stopped", "loading", "na"
@@ -28,6 +28,20 @@ if not HOST_IP:
 def get_prompt_running():
     return prompt_running[0]
 
+
+# def append_to_json(message):
+#     with open('storage.json', 'r') as file:
+#         data = json.load(file)
+#     data["db"].append(message)
+#     with open('storage.json', 'w') as file:
+#         json.dump(data, file)
+
+# def get_last_messages(n):
+#     with open('storage.json', 'r') as file:
+#         data = json.load(file)
+#     if len(data["db"]) < n:
+#         return data["db"]
+#     return data["db"][-n:]
 
 
 
@@ -68,6 +82,10 @@ async def run_websocket_client(message_queue, agent_id):
 
             recent_messages = [message["agent-message"] for message in json_message.get("recent-messages", []) if "agent-message" in message]
 
+            # recent_messages = get_last_messages(5)
+            # print("recent messages")
+            # print(recent_messages)
+
             try:
                 #This is where the magic happens
                 await run_pam(message_queue, json_message["text"], recent_messages, get_prompt_running, MOCKDATA)
@@ -105,23 +123,6 @@ async def run_websocket_client(message_queue, agent_id):
 
     async def process_queue():
 
-
-        def doesMessageNotHaveAnImage(message):
-            try:
-                if "content" in message:
-                    res = True
-                    for sub_message in message["content"]:
-                        if not doesMessageNotHaveAnImage(sub_message):
-                            return False
-                    return res
-                elif "type" in message and message["type"] == "image":
-                    return False
-                else:
-                    return True
-            except Exception as e:
-                return True
-
-
         nonlocal ws_connection
         while True:
             if ws_connection and message_queue:
@@ -131,6 +132,8 @@ async def run_websocket_client(message_queue, agent_id):
                         print('invalid message being popped')
                         message_queue.popleft()
                         continue
+                    # if 'agent-message' in message:
+                    #     append_to_json(message['agent-message'])
                     json_message = json.dumps(message)
                     await ws_connection.send(json_message)
                     message_queue.popleft()  # Only remove after successful send
@@ -154,6 +157,21 @@ async def run_websocket_client(message_queue, agent_id):
         process_queue(),
         heartbeat()
     )
+
+def doesMessageNotHaveAnImage(message):
+    try:
+        if "content" in message:
+            res = True
+            for sub_message in message["content"]:
+                if not doesMessageNotHaveAnImage(sub_message):
+                    return False
+            return res
+        elif "type" in message and message["type"] == "image":
+            return False
+        else:
+            return True
+    except Exception as e:
+        return True
 
 # if name is main
 if __name__ == "__main__":
