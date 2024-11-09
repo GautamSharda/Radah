@@ -25,7 +25,9 @@ interface ErrorContextInput {
 
 const ErrorContext = createContext({
     error: undefined as ErrorContextProps | undefined,
-    setError: (error: ErrorContextInput) => { },
+    setError: (errorInput: ErrorContextInput) => {
+        console.log('Error set:', errorInput);
+    },
 });
 
 export const useError = () => useContext(ErrorContext);

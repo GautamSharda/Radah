@@ -1,5 +1,6 @@
+import { useState, useEffect } from 'react';
 import Spinner from "@/components/ui/spinner.tsx";
-import { Agent, BuildingContainer, DockerContainer } from '@/App';
+import { Agent, BuildingContainer, Container } from '@/App';
 interface VncViewerProps {
   showControls: boolean;
   agent: Agent;
@@ -60,7 +61,7 @@ export function VncViewer({ showControls, agent, switchingAgent }: VncViewerProp
     );
   }
 
-  const vncUrl = getVncUrl((agent as DockerContainer).vnc_port, !showControls, agent.agent_id);
+  const vncUrl = getVncUrl((agent as Container).vnc_port, !showControls, agent.agent_id);
 
   return (
     <div className="w-full aspect-w-16 aspect-h-9">
