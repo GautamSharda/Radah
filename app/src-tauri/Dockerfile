@@ -57,7 +57,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN touch /init.py
 
 # Set execute permissions
-RUN chmod +x /startup.sh /novnc_startup.sh /init.py
+RUN chmod +x /startup.sh /novnc_startup.sh /app.py
 
 RUN mkdir -p /var/log/supervisor && \
     touch /var/log/supervisor/vnc.log \
@@ -71,19 +71,6 @@ RUN mkdir -p /var/log/supervisor && \
 # Install Python packages from requirements.txt
 COPY image/requirements.txt /requirements.txt
 RUN pip3 install -r /requirements.txt
-
-#Add the python app to the supervisor conf
-# RUN echo "\n\
-# [program:python_app]\n\
-# command=python3 /app.py\n\
-# user=vncuser\n\
-# environment=DISPLAY=:1,HOME=/home/vncuser,XAUTHORITY=/home/vncuser/.Xauthority\n\
-# autostart=true\n\
-# autorestart=true\n\
-# priority=200\n\
-# depends_on=vnc\n\
-# startretries=5\n\
-# startsecs=10" >> /etc/supervisor/conf.d/supervisord.conf
 
 # Expose ports
 EXPOSE 5900
