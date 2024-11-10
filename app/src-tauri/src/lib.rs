@@ -22,6 +22,10 @@ use tokio_rustls::rustls::{Certificate, PrivateKey, ServerConfig};
 use std::fs::File;
 use std::io::BufReader;
 
+//file imports
+mod launch_podman;
+use launch_podman::podman_setup;
+
 // Add this import for the echo endpoint
 use warp::hyper::body::Bytes;
 
@@ -128,6 +132,7 @@ async fn start_websocket_server() {
     // Bind to all interfaces (0.0.0.0) instead of just localhost
     warp::serve(routes).run(([0, 0, 0, 0], 3030)).await;
 }
+
 
 //Handle websocket connections
 async fn handle_websocket(websocket: warp::ws::WebSocket, app_handle: tauri::AppHandle) {
@@ -588,40 +593,6 @@ fn get_occupied_ports() -> Vec<u16> {
     OCCUPIED_PORTS.lock().unwrap().clone()
 }
 
-#[tauri::command]
-async fn cleanup_agent_container(app_handle: tauri::AppHandle, agent_id: String) -> Result<(), String> {
-    // Find the container name
-    let container_name = format!("agent-{}", agent_id);
-
-    // Stop the container
-    let stop_output = Command::new("podman")
-        .args(&["stop", &container_name])
-        .output()
-        .map_err(|e| format!("Failed to stop container: {}", e))?;
-
-    if !stop_output.status.success() {
-        println!("Warning: Failed to stop container: {}", String::from_utf8_lossy(&stop_output.stderr));
-    }
-
-    // Remove the container
-    let rm_output = Command::new("podman")
-        .args(&["rm", "-f", &container_name])
-        .output()
-        .map_err(|e| format!("Failed to remove container: {}", e))?;
-
-    if !rm_output.status.success() {
-        println!("Warning: Failed to remove container: {}", String::from_utf8_lossy(&rm_output.stderr));
-    }
-
-    // Update the containers list
-    let mut containers = CONTAINERS.lock().unwrap();
-    containers.retain(|c| c.agent_id != agent_id);
-    save_containers(&app_handle, &containers)?;
-
-    Ok(())
-}
-
-
 // start container takes a container id and starts the container by running docker start
 #[tauri::command]
 async fn start_container(container_id: String) -> Result<(), String> {
@@ -634,7 +605,6 @@ async fn start_container(container_id: String) -> Result<(), String> {
     Ok(())
 }
 
-
 #[tauri::command]
 fn get_all_containers() -> Vec<Container> {
     let containers = CONTAINERS.lock().unwrap();
@@ -643,18 +613,26 @@ fn get_all_containers() -> Vec<Container> {
 
 fn get_available_ports() -> Result<Vec<u16>, String> {
     let mut available_ports = Vec::new();
+    let containers = CONTAINERS.lock().unwrap();
+    
+    // Collect all ports currently in use by containers
+    let used_ports: Vec<u16> = containers.iter()
+        .map(|c| c.vnc_port)
+        .collect();
     
     // Check VNC ports starting at 5900
     for offset in 0..100 {  // Increased range to check more ports
         let port = 5900 + offset;
-        if !is_port_in_use(port) {
+        // Check if port is not in use by system AND not used by any container
+        if !is_port_in_use(port) && !used_ports.contains(&port) {
             available_ports.push(port);
             // Don't break - keep looking for more ports
             if available_ports.len() == 1 {
                 // Found VNC port, now look for noVNC port
                 for novnc_offset in 0..100 {  // Increased range for noVNC ports too
                     let novnc_port = 6080 + novnc_offset;
-                    if !is_port_in_use(novnc_port) {
+                    // Check if noVNC port is not in use by system AND not used by any container
+                    if !is_port_in_use(novnc_port) && !used_ports.contains(&novnc_port) {
                         available_ports.push(novnc_port);
                         return Ok(available_ports);  // Found both ports, return them
                     }
@@ -806,109 +784,18 @@ fn load_messages<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<std::collectio
         .map_err(|e| format!("Failed to parse messages file: {}", e))
 }
 
-#[cfg(target_os = "macos")]
-async fn install_homebrew() -> Result<(), String> {
-    println!("Installing Homebrew...");
-    
-    // The official Homebrew installation command
-    let install_cmd = "/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"";
-    
-    let output = Command::new("bash")
-        .arg("-c")
-        .arg(install_cmd)
-        .output()
-        .map_err(|e| format!("Failed to execute Homebrew installation: {}", e))?;
-
-    if !output.status.success() {
-        let error = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Failed to install Homebrew: {}", error));
-    }
-
-    println!("Homebrew installed successfully");
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
-async fn install_podman() -> Result<(), String> {
-    // Check if brew is installed
-    let brew_check = Command::new("which")
-        .arg("brew")
-        .output()
-        .map_err(|e| format!("Failed to check for brew: {}", e))?;
-
-    if !brew_check.status.success() {
-        println!("Homebrew not found, installing it first...");
-        install_homebrew().await?;
+// Add this helper function
+async fn start_all_containers(containers: Vec<Container>) {
+    for container in containers {
+        let container_id = container.id.clone();
+        println!("Starting container: {}", container_id);
         
-        // Double check brew is now available
-        let brew_recheck = Command::new("which")
-            .arg("brew")
-            .output()
-            .map_err(|e| format!("Failed to check for brew after installation: {}", e))?;
-            
-        if !brew_recheck.status.success() {
-            return Err("Failed to install Homebrew properly".to_string());
-        }
-    }
-
-    // Install podman using brew
-    println!("Installing podman...");
-    let install_output = Command::new("brew")
-        .args(&["install", "podman"])
-        .output()
-        .map_err(|e| format!("Failed to install podman: {}", e))?;
-
-    if !install_output.status.success() {
-        let error = String::from_utf8_lossy(&install_output.stderr);
-        return Err(format!("Failed to install podman: {}", error));
-    }
-
-    println!("Podman installed successfully");
-
-    // Initialize podman machine
-    println!("Initializing podman machine...");
-    let init_output = Command::new("podman")
-        .args(&["machine", "init"])
-        .output()
-        .map_err(|e| format!("Failed to initialize podman machine: {}", e))?;
-
-    if !init_output.status.success() {
-        let error = String::from_utf8_lossy(&init_output.stderr);
-        return Err(format!("Failed to initialize podman machine: {}", error));
-    }
-
-    // Start podman machine
-    println!("Starting podman machine...");
-    let start_output = Command::new("podman")
-        .args(&["machine", "start"])
-        .output()
-        .map_err(|e| format!("Failed to start podman machine: {}", e))?;
-
-    if !start_output.status.success() {
-        let error = String::from_utf8_lossy(&start_output.stderr);
-        return Err(format!("Failed to start podman machine: {}", error));
-    }
-
-    println!("Podman machine started successfully");
-    Ok(())
-}
-
-// Add this function to check for podman
-async fn check_podman() -> Result<bool, String> {
-    let output = Command::new("podman")
-        .args(&["--version"])
-        .output();
-    
-    match output {
-        Ok(output) => Ok(output.status.success()),
-        Err(e) => {
-            // If command not found, return Ok(false) instead of an error
-            if e.kind() == std::io::ErrorKind::NotFound {
-                Ok(false)
-            } else {
-                Err(format!("Error checking podman: {}", e))
+        tauri::async_runtime::spawn(async move {
+            match start_container(container_id.clone()).await {
+                Ok(_) => println!("Successfully started container {}", container_id),
+                Err(e) => eprintln!("Failed to start container {}: {}", container_id, e),
             }
-        }
+        });
     }
 }
 
@@ -923,30 +810,13 @@ pub fn run() {
             *APP_HANDLE.lock().unwrap() = Some(app.handle().clone());
 
             // Check for podman and install if needed
-            tauri::async_runtime::block_on(async {
-                match check_podman().await {
-                    Ok(true) => println!("Podman is already installed"),
-                    Ok(false) => {
-                        println!("Podman not found, attempting to install...");
-                        match install_podman().await {
-                            Ok(_) => println!("Successfully installed podman"),
-                            Err(e) => {
-                                eprintln!("Failed to install podman: {}", e);
-                                // You might want to show this error to the user via the UI
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Unexpected error checking for podman: {}", e);
-                        // You might want to show this error to the user via the UI
-                    }
-                }
-            });
-
+            tauri::async_runtime::block_on(podman_setup());
             // Load containers on startup
             if let Ok(containers) = load_containers(&app.handle()) {
                 let mut stored_containers = CONTAINERS.lock().unwrap();
-                *stored_containers = containers;
+                *stored_containers = containers.clone();
+                // Start all containers using the helper function
+                tauri::async_runtime::spawn(start_all_containers(containers));
             }
 
             // Add this: Load messages on startup
@@ -966,7 +836,6 @@ pub fn run() {
             get_occupied_ports,
             create_agent_container,
             get_agent_container,
-            cleanup_agent_container,
             get_all_containers,
             get_user_data,
             update_user_data,

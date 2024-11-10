@@ -2,7 +2,7 @@ import websockets
 import json
 import asyncio
 import os
-import aiohttp
+# import aiohttp
 from collections import deque
 from pam import run_pam
 

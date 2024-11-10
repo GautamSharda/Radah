@@ -28,6 +28,8 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
                 if (!agentId || !currentAgent?.id) return;
                 //@ts-ignore
                 await core.invoke('start_container', { containerId: currentAgent?.id });
+                //wait 2 seconds
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 const messages = await core.invoke<Message[]>('get_agent_messages', { agentId });
                 setMessages(messages);
                 const promptRunning = await core.invoke<string>('get_prompt_running', { agentId });

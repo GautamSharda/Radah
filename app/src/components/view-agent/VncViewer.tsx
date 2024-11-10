@@ -52,7 +52,7 @@ export function VncViewer({ showControls, agent, switchingAgent }: VncViewerProp
       <div className='w-full aspect-w-16 aspect-h-9 border-2 rounded-lg flex justify-center items-center bg-slate-50 min-h-[150px]'>
         <div className="h-full flex justify-center items-center w-full px-4">
           <div className="flex flex-col gap-2">
-            <p className="text-slate-900 font-bold mb-4">Switching to new agent...</p>
+            <p className="text-slate-900 font-bold mb-4">Loading the agent...</p>
             <Spinner size="medium" />
           </div>
         </div>
