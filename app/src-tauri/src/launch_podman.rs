@@ -10,7 +10,7 @@ pub async fn podman_setup() -> Result<(), String> {
         .output();
     
     match output {
-        Ok(output) => {
+        Ok(_output) => {
             println!("Podman is already installed");
             configure_podman().await
         },
