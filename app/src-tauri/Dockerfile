@@ -34,11 +34,8 @@ RUN apt-get update && apt-get install -y \
 RUN useradd -m -s /bin/bash vncuser
 RUN echo "vncuser:vncpassword" | chpasswd
 
-# Set up VNC password
 USER vncuser
 RUN mkdir -p /home/vncuser/.vnc
-RUN echo "vncpassword" | vncpasswd -f > /home/vncuser/.vnc/passwd
-RUN chmod 600 /home/vncuser/.vnc/passwd
 
 # Install noVNC
 USER root
