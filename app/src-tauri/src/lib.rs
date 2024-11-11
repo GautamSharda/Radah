@@ -65,112 +65,46 @@ async fn get_prompt_running(agent_id: String) -> String {
 }
 
 #[tauri::command]
-async fn create_agent_container(app_handle: tauri::AppHandle, agent_id: String, agent_type: String, number: i32, message_ids: Vec<String>) -> Result<Container, String> {
-    println!("Creating agent with id: {}, type: {}, number: {}, message_ids: {:?}", agent_id, agent_type, number, message_ids);
-    let ports = get_available_ports()?;
-    let vnc_port = ports[0];
-    let novnc_port = ports[1];
-
-    // Check if Podman daemon is running
-    let podman_check = Command::new("podman")
-        .args(&["info"])
-        .output()
-        .map_err(|e| format!("Failed to check Podman status: {}. Is Podman running?", e))?;
-
-    if !podman_check.status.success() {
-        let stderr = String::from_utf8_lossy(&podman_check.stderr);
-        println!("Podman check failed: {}", stderr);
-        return Err("Podman daemon is not running. Please start Podman first.".to_string());
-    }
-    // Check for existing container with same name and remove it
-    let container_name = format!("agent-{}", agent_id);
-    println!("Checking for existing container: {}", container_name);
-    
-    let existing = Command::new("podman")
-        .args(&["ps", "-a", "--filter", &format!("name={}", container_name)])
-        .output()
-        .map_err(|e| format!("Failed to check existing containers: {}", e))?;
-
-    if !String::from_utf8_lossy(&existing.stdout).trim().is_empty() {
-        println!("Found existing container, removing it...");
-        let _ = Command::new("podman")
-            .args(&["rm", "-f", &container_name])
-            .output()
-            .map_err(|e| format!("Failed to remove existing container: {}", e))?;
-        println!("Removed existing container");
-    }
-
-    // Build the Podman image
-    println!("Build context: {}", env!("CARGO_MANIFEST_DIR"));
-    
-    let build_output = Command::new("podman")
-        .args(&[
-            "build",
-            "-t",
-            "minimal-vnc-desktop",
-            env!("CARGO_MANIFEST_DIR"),
-        ])
-        .output()
-        .map_err(|e| format!("Failed to execute podman build command: {}", e))?;
-
-    // Always print build output regardless of success/failure
-    let stderr = String::from_utf8_lossy(&build_output.stderr);
-    let stdout = String::from_utf8_lossy(&build_output.stdout);
-    println!("Build stdout:\n{}", stdout);
-    println!("Build stderr:\n{}", stderr);
-
-    if !build_output.status.success() {
-        return Err(format!("Podman build failed.\nStderr: {}\nStdout: {}", stderr, stdout));
-    }
-    // Run the Podman container
-    println!("Starting container...");
-    
-    // Create the formatted strings first
-    let container_id_env = format!("CONTAINER_ID={}", agent_id);
-    let api_key_env = format!("ANTHROPIC_API_KEY={}", env::var("ANTHROPIC_API_KEY").unwrap());
-    let vnc_port_mapping = format!("{}:5900", vnc_port);
-    let novnc_port_mapping = format!("{}:6080", novnc_port);
+async fn create_agent_container(
+    app_handle: tauri::AppHandle,
+    agent_id: String,
+    agent_type: String,
+    number: i32,
+    message_ids: Vec<String>,
+) -> Result<Container, String> {
+    let ports = get_available_ports().map_err(|e| e.to_string())?;
     let container_name = format!("agent-{}", agent_id);
 
-    let run_args = vec![
-        "run",
-        "-d",  // Run in detached mode
-        "--network", "bridge",  // Explicitly use bridge networking
-        "-e", "DISPLAY=:0",
-        "-e", &container_id_env,
-        "-e", &api_key_env,
-        "-e", "GEOMETRY=1920x1080",
-        "-e", "HOST_IP=host.containers.internal",
-        "-p", &vnc_port_mapping,
-        "-p", &novnc_port_mapping,
-        "--name", &container_name,
-        // Remove the problematic --add-host flag and use DNS instead
-        "minimal-vnc-desktop",
-    ];
-    println!("Running podman with args: {:?}", run_args);
+    // Check and remove existing container
+    if !String::from_utf8_lossy(&Command::new("podman").args(&["ps", "-a", "--filter", &format!("name={}", container_name)]).output().map_err(|e| e.to_string())?.stdout,).trim().is_empty(){
+        Command::new("podman").args(&["rm", "-f", &container_name]).output().map_err(|e| e.to_string())?;
+    }
 
+    // Build image
+    Command::new("podman").args(&["build", "-t", "minimal-vnc-desktop", env!("CARGO_MANIFEST_DIR")]).output().map_err(|e| format!("Build failed: {}", e.to_string()))?;
+
+    // Run container
     let run_output = Command::new("podman")
-        .args(&run_args)
+        .args(&["run", "-d", "--network", "bridge", "-e", "DISPLAY=:0", "-e", &format!("CONTAINER_ID={}", agent_id), "-e", &format!("ANTHROPIC_API_KEY={}", env::var("ANTHROPIC_API_KEY").map_err(|e| e.to_string())?), "-e", "GEOMETRY=1920x1080", "-e", "HOST_IP=host.containers.internal", "-p", &format!("{}:5900", ports[0]), "-p", &format!("{}:6080", ports[1]), "--name", &container_name, "minimal-vnc-desktop"])
         .output()
         .map_err(|e| e.to_string())?;
 
-    let run_stderr = String::from_utf8_lossy(&run_output.stderr);
-    let run_stdout = String::from_utf8_lossy(&run_output.stdout);
-
     if !run_output.status.success() {
-        return Err(format!("Failed to start container.\nStderr: {}\nStdout: {}", run_stderr, run_stdout));
+        return Err("Failed to start container".to_string());
     }
 
-    let container_id = run_stdout.trim().to_string();
-    println!("Container started successfully with ID: {}", container_id);
-
-    let container = Container { id: container_id, vnc_port: novnc_port, agent_id, agent_type, number, message_ids: message_ids };
+    let container = Container {
+        id: String::from_utf8_lossy(&run_output.stdout).trim().to_string(),
+        vnc_port: ports[1],
+        agent_id,
+        agent_type,
+        number,
+        message_ids,
+    };
 
     let mut containers = CONTAINERS.lock().unwrap();
     containers.push(container.clone());
-    
-    save_containers(&app_handle, &containers)?;
-    println!("Container metadata saved");
+    save_containers(&app_handle, &containers).map_err(|e| e.to_string())?;
 
     Ok(container)
 }
@@ -232,20 +166,10 @@ fn clear_all_storage(app_handle: tauri::AppHandle) {
     let containers_file = app_handle.path().app_data_dir()
         .expect("Failed to get app data dir")
         .join("containers.json");
+    let _ = serde_json::to_string(&*containers).map(|json| std::fs::write(&containers_file, json));
     
-    if let Ok(json) = serde_json::to_string(&*containers) {
-        if let Err(e) = std::fs::write(&containers_file, json) {
-            eprintln!("Failed to save containers file: {}", e);
-        }
-    }
-
-    // Save messages to disk
     let messages_file = get_messages_file(&app_handle);
-    if let Ok(json) = serde_json::to_string(&*messages) {
-        if let Err(e) = std::fs::write(&messages_file, json) {
-            eprintln!("Failed to save messages file: {}", e);
-        }
-    }
+    let _ = serde_json::to_string(&*messages).map(|json| std::fs::write(&messages_file, json));
 }
 
 // Clear all messages and message IDs in the containers
@@ -262,23 +186,13 @@ fn clear_all_messages(app_handle: tauri::AppHandle) {
         .expect("Failed to get app data dir")
         .join("containers.json");
     
-    if let Ok(json) = serde_json::to_string(&*containers) {
-        if let Err(e) = std::fs::write(&containers_file, json) {
-            eprintln!("Failed to save containers file: {}", e);
-        }
-    }
+    let _ = serde_json::to_string(&*containers)
+        .map(|json| std::fs::write(&containers_file, json));
 
-    // Clear messages from memory
+    // Clear messages from memory and disk
     let mut messages = MESSAGES.lock().unwrap();
     messages.clear();
-
-    // Clear messages from disk
-    let messages_file = get_messages_file(&app_handle);
-    if messages_file.exists() {
-        if let Err(e) = std::fs::remove_file(&messages_file) {
-            eprintln!("Failed to delete messages file: {}", e);
-        }
-    }
+    let _ = std::fs::remove_file(get_messages_file(&app_handle));
 }
 
 //read all user data
