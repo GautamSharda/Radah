@@ -101,36 +101,11 @@ async fn start_websocket_server() {
         .map(|ws: warp::ws::Ws, handle| {
             ws.on_upgrade(move |socket| handle_websocket(socket, handle))
         });
-
-    // Echo endpoint - accepts both GET and POST requests
-    let echo_route = warp::path("echo")
-        .and(warp::body::bytes())
-        .and(warp::header::headers_cloned())
-        .map(|body: Bytes, headers| {
-
-            //this endpoint is no longer in use
-
-            //print the body
-            println!("Echo endpoint hit! Body: {}", String::from_utf8_lossy(&body));
-
-            //body contains agent_id
-            let agent_id = String::from_utf8_lossy(&body).to_string();
-            
-            //get recent messages for this agent
-            let messages = get_recent_agent_messages(agent_id, 5);
-            
-            warp::reply::json(&messages)
-        });
-
-    // Combine routes
-    let routes = ws_route.or(echo_route);
-
     println!("Server starting on http://0.0.0.0:3030");
     println!("WebSocket endpoint: ws://0.0.0.0:3030/ws");
-    println!("Echo endpoint: http://0.0.0.0:3030/echo");
 
     // Bind to all interfaces (0.0.0.0) instead of just localhost
-    warp::serve(routes).run(([0, 0, 0, 0], 3030)).await;
+    warp::serve(ws_route).run(([0, 0, 0, 0], 3030)).await;
 }
 
 
@@ -291,7 +266,13 @@ async fn handle_agent_message(
 }
 
 
-async fn handle_client_message(_conn_id: &str, _tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>, mut json: serde_json::Value, app_handle: tauri::AppHandle, get_recents_messages: bool) {
+async fn handle_client_message(
+    _conn_id: &str,
+    _tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>,
+    mut json: serde_json::Value,
+    app_handle: tauri::AppHandle,
+    get_recents_messages: bool,
+) {
     // Extract values early before modifying json
     let agent_id = json.get("agent_id")
         .and_then(|v| v.as_str())
@@ -313,9 +294,28 @@ async fn handle_client_message(_conn_id: &str, _tx: &Arc<AsyncMutex<futures::str
                 }
             }
 
-            // Send the copy with history over websocket
-            if let Err(e) = conn_info.tx.lock().await.send(warp::ws::Message::text(serde_json::to_string(&json_with_history).unwrap())).await {
-                eprintln!("Error forwarding prompt to agent {}: {}", agent_id_value, e);
+            // Generate a unique message ID
+            let message_id = generate_random_id();
+            if let serde_json::Value::Object(ref mut map) = json_with_history {
+                map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
+            }
+
+            // Convert the JSON message to a string
+            let json_string = serde_json::to_string(&json_with_history).unwrap();
+            let chunk_size = 1024; // Define a suitable chunk size
+            let total_chunks = (json_string.len() + chunk_size - 1) / chunk_size;
+
+            for (i, chunk) in json_string.as_bytes().chunks(chunk_size).enumerate() {
+                let chunk_message = serde_json::json!({
+                    "message_id": message_id,
+                    "chunk": i,
+                    "total_chunks": total_chunks,
+                    "data": String::from_utf8_lossy(chunk),
+                });
+
+                if let Err(e) = conn_info.tx.lock().await.send(warp::ws::Message::text(serde_json::to_string(&chunk_message).unwrap())).await {
+                    eprintln!("Error forwarding chunk to agent {}: {}", agent_id_value, e);
+                }
             }
         }
         

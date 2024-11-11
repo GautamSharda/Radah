@@ -23,13 +23,20 @@ export function RightSidebar({ messages, agentId, sendMessage, promptRunning, st
 
   const usedMessageIDSet = new Set<string>();
   const uniqueMessages = messages
-    .filter(message => message.show_ui)
-    .filter(message => !(message['agent-message']))
+    .filter(message => {
+      if (message.show_ui) return true;
+      try {
+        const content = message['agent-message']['content'][0]['content'][0]
+        if (content.type === 'image' && content['source']['data']) return true;
+      } catch (e) {
+        return false;
+      }
+      return false;
+    })
     .filter(message => !(message.agent_id && message.agent_id !== agentId))
     .filter(message => message.message_id && !usedMessageIDSet.has(message.message_id) && usedMessageIDSet.add(message.message_id));
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-
 
   useEffect(() => {
     prevHeightRef.current = 0;

@@ -4,4 +4,3 @@ httpx
 pyautogui
 pillow
 websockets
-aiohttp

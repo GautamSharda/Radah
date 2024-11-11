@@ -8,7 +8,7 @@ from pam import run_pam
 
 #Config
 HEARTBEAT = False
-MOCKDATA = True
+MOCKDATA = False
 
 # Global variables
 prompt_running = ["stopped"] #"running", "stopped", "loading", "na"
@@ -28,20 +28,6 @@ if not HOST_IP:
 def get_prompt_running():
     return prompt_running[0]
 
-
-# def append_to_json(message):
-#     with open('storage.json', 'r') as file:
-#         data = json.load(file)
-#     data["db"].append(message)
-#     with open('storage.json', 'w') as file:
-#         json.dump(data, file)
-
-# def get_last_messages(n):
-#     with open('storage.json', 'r') as file:
-#         data = json.load(file)
-#     if len(data["db"]) < n:
-#         return data["db"]
-#     return data["db"][-n:]
 
 
 
@@ -74,7 +60,8 @@ async def run_websocket_client(message_queue, agent_id):
 
     async def message_handler():
         nonlocal ws_connection
-
+        message_buffers = {}  # Use a dictionary to store message buffers by message_id
+        
         async def promptMessageHandler(json_message):
             if json_message["message-type"] != "prompt" or prompt_running[0] != "stopped" or "text" not in json_message:
                 return
@@ -82,12 +69,7 @@ async def run_websocket_client(message_queue, agent_id):
 
             recent_messages = [message["agent-message"] for message in json_message.get("recent-messages", []) if "agent-message" in message]
 
-            # recent_messages = get_last_messages(5)
-            # print("recent messages")
-            # print(recent_messages)
-
             try:
-                #This is where the magic happens
                 await run_pam(message_queue, json_message["text"], recent_messages, get_prompt_running, MOCKDATA)
             except Exception as e:
                 message_queue.append({"message-type": "message", "text": f"Error running Pam: {str(e)}", "error": True, "show_ui": True })
@@ -97,43 +79,56 @@ async def run_websocket_client(message_queue, agent_id):
                 message_queue.append({"message-type": "message", "text": "The agent has finished running", "end_message": True, "show_ui": True, "prompt_running": prompt_running[0] })
                 print("Pam finished")
 
-
-        while True:  # Keep trying to handle messages
+        while True:
             if ws_connection:
                 try:
                     while True:
                         message = await ws_connection.recv()
                         json_message = json.loads(message)
                         print(f"Received message: {json_message}\n\n")
-                        if json_message["message-type"] == "prompt":
-                            asyncio.create_task(promptMessageHandler(json_message))
-                        elif json_message["message-type"] == "stop":
-                            print("Updating prompt running to stopped")
-                            prompt_running[0] = "stopped"
+
+                        # Handle chunked messages
+                        if "message_id" in json_message and "chunk" in json_message and "total_chunks" in json_message:
+                            message_id = json_message["message_id"]
+                            chunk = json_message["chunk"]
+                            total_chunks = json_message["total_chunks"]
+                            data = json_message["data"]
+
+                            if message_id not in message_buffers:
+                                message_buffers[message_id] = {}
+
+                            message_buffers[message_id][chunk] = data
+                            
+                            if len(message_buffers[message_id]) == total_chunks:
+                                full_message = ''.join(message_buffers[message_id][i] for i in range(total_chunks))
+                                json_message = json.loads(full_message)
+                                del message_buffers[message_id]  # Clear buffer after processing
+
+                                if json_message["message-type"] == "prompt":
+                                    asyncio.create_task(promptMessageHandler(json_message))
+                                elif json_message["message-type"] == "stop":
+                                    print("Updating prompt running to stopped")
+                                    prompt_running[0] = "stopped"
 
                 except websockets.exceptions.ConnectionClosed:
                     print("WebSocket connection closed, attempting to reconnect...")
                 except Exception as e:
                     print(f"Error in message handler: {e}")
-                # Connection lost, try to reconnect
                 ws_connection = await connect()
             else:
-                # No connection, try to establish one
                 ws_connection = await connect()
 
     async def process_queue():
-
         nonlocal ws_connection
         while True:
             if ws_connection and message_queue:
                 try:
                     message = message_queue[0]  # Peek at first message
-                    if 'agent-message' in message and not doesMessageNotHaveAnImage(message['agent-message']):
-                        print('invalid message being popped')
-                        message_queue.popleft()
-                        continue
-                    # if 'agent-message' in message:
-                    #     append_to_json(message['agent-message'])
+                    #We don't need this rn because the UI handles finding the images
+                    # if 'agent-message' in message and not doesMessageNotHaveAnImage(message['agent-message']):
+                    #     print('showing ui')
+                    #     print(message)
+                    #     message['show_ui'] = True
                     json_message = json.dumps(message)
                     await ws_connection.send(json_message)
                     message_queue.popleft()  # Only remove after successful send
@@ -158,20 +153,20 @@ async def run_websocket_client(message_queue, agent_id):
         heartbeat()
     )
 
-def doesMessageNotHaveAnImage(message):
-    try:
-        if "content" in message:
-            res = True
-            for sub_message in message["content"]:
-                if not doesMessageNotHaveAnImage(sub_message):
-                    return False
-            return res
-        elif "type" in message and message["type"] == "image":
-            return False
-        else:
-            return True
-    except Exception as e:
-        return True
+# def doesMessageNotHaveAnImage(message):
+#     try:
+#         if "content" in message:
+#             res = True
+#             for sub_message in message["content"]:
+#                 if not doesMessageNotHaveAnImage(sub_message):
+#                     return False
+#             return res
+#         elif "type" in message and message["type"] == "image":
+#             return False
+#         else:
+#             return True
+#     except Exception as e:
+#         return True
 
 # if name is main
 if __name__ == "__main__":
@@ -179,19 +174,3 @@ if __name__ == "__main__":
     if RUNNING_LOCALLY:
         agent_id = "pam-1"
     asyncio.run(main(agent_id))
-    print("App finished")
-
-
-
-
-
-# async def getRecentMessage(message):
-#     print(f"Getting recent message for {message}")
-#     try:
-#         async with aiohttp.ClientSession() as session:
-#             async with session.post(f'http://{HOST_IP}:3030/echo', data=message) as response:
-#                 print(f"Recent message response: {response}")
-#                 return await response.json()
-#     except Exception as e:
-#         print(f"Error getting recent message: {e}")
-#         return []

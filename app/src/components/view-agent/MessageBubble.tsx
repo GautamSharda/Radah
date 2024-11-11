@@ -67,6 +67,28 @@ export function MessageBubble({ message }: { message: Message }) {
         )
     }
 
+    if (message['agent-message']) {
+        try {
+            const content = message['agent-message']['content'][0]['content'][0];
+            if (content.type === 'image') {
+                const base64Image = content['source']['data'];
+                return (
+                    <div className="rounded-xl">
+                        <img src={`data:image/png;base64,${base64Image}`} alt="Agent Image" className="rounded-sm" />
+                    </div>
+                )
+            }
+        } catch (e) {
+            return null;
+        }
+        return null;
+        // return (
+        //     <div>
+        //         <p>{JSON.stringify(message['agent-message'])}</p>
+        //     </div>
+        // )
+    }
+
     return (
         <div>
             <p>{JSON.stringify(message)}</p>
