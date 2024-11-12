@@ -71,7 +71,7 @@ async fn install_podman() -> Result<(), String> {
 
     info!("Installing podman via Homebrew");
     let install_output = Command::new("/opt/homebrew/bin/brew")
-        .args(&["install", "/opt/homebrew/bin/podman"])
+        .args(&["install", "podman"])
         .output()
         .map_err(|e| {
             let err_msg = format!("Failed to install podman: {}", e);
