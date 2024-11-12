@@ -111,7 +111,7 @@ export default function App() {
       setAgents((agents).map(agent => agent.agent_id === newAgent.agent_id ? { ...newAgent, error: 'Failed to create container', loading: false } : agent));
       console.log(error);
       //@ts-ignore
-      setError({ primaryMessage: error, timeout: 750000 });
+      setError({ primaryMessage: error, timeout: 7500 });
     }
   };
 

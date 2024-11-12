@@ -87,7 +87,17 @@ async fn create_agent_container(
 
     // Run container
     let run_output = Command::new("/opt/homebrew/bin/podman")
-        .args(&["run", "-d", "--network", "bridge", "-e", "DISPLAY=:0", "-e", &format!("CONTAINER_ID={}", agent_id), "-e", &format!("ANTHROPIC_API_KEY={}", env::var("ANTHROPIC_API_KEY").map_err(|e| e.to_string())?), "-e", "GEOMETRY=1920x1080", "-e", "HOST_IP=host.containers.internal", "-p", &format!("{}:5900", ports[0]), "-p", &format!("{}:6080", ports[1]), "--name", &container_name, "minimal-vnc-desktop"])
+        .args(&["run", 
+        "-d", "--network", "bridge", 
+        "-e", "DISPLAY=:0", 
+        "-e", &format!("CONTAINER_ID={}", agent_id), 
+        "-e", &format!("ANTHROPIC_API_KEY={}", "replace this gautam")
+        "-e", "GEOMETRY=1920x1080", 
+        "-e", "HOST_IP=host.containers.internal", 
+        "-p", &format!("{}:5900", ports[0]), 
+        "-p", &format!("{}:6080", ports[1]), 
+        "--name", &container_name, 
+        "minimal-vnc-desktop"])
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -238,16 +248,6 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        // .plugin(
-        //     tauri_plugin_log::Builder::new()
-        //     .target(tauri_plugin_log::Target::new(
-        //         tauri_plugin_log::TargetKind::Folder {
-        //           path: std::path::PathBuf::from("/Users/patrickfoster/Desktop/radah-logs"),
-        //           file_name: None,
-        //         },
-        //       ))
-        //         .build()
-        // )
         .setup(|app| {
             info!("Setting up app here - run 4!");
             // Store the app handle globally
