@@ -6,6 +6,8 @@ use serde::{Serialize, Deserialize};
 use tauri::Manager;
 use dotenv::dotenv;
 
+use log::{info, error};
+
 //file imports
 mod launch_podman;
 use launch_podman::podman_setup;
@@ -76,15 +78,15 @@ async fn create_agent_container(
     let container_name = format!("agent-{}", agent_id);
 
     // Check and remove existing container
-    if !String::from_utf8_lossy(&Command::new("podman").args(&["ps", "-a", "--filter", &format!("name={}", container_name)]).output().map_err(|e| e.to_string())?.stdout,).trim().is_empty(){
-        Command::new("podman").args(&["rm", "-f", &container_name]).output().map_err(|e| e.to_string())?;
+    if !String::from_utf8_lossy(&Command::new("/opt/homebrew/bin/podman").args(&["ps", "-a", "--filter", &format!("name={}", container_name)]).output().map_err(|e| e.to_string())?.stdout,).trim().is_empty(){
+        Command::new("/opt/homebrew/bin/podman").args(&["rm", "-f", &container_name]).output().map_err(|e| e.to_string())?;
     }
 
     // Build image
-    Command::new("podman").args(&["build", "-t", "minimal-vnc-desktop", env!("CARGO_MANIFEST_DIR")]).output().map_err(|e| format!("Build failed: {}", e.to_string()))?;
+    Command::new("/opt/homebrew/bin/podman").args(&["build", "-t", "minimal-vnc-desktop", env!("CARGO_MANIFEST_DIR")]).output().map_err(|e| format!("Build failed: {}", e.to_string()))?;
 
     // Run container
-    let run_output = Command::new("podman")
+    let run_output = Command::new("/opt/homebrew/bin/podman")
         .args(&["run", "-d", "--network", "bridge", "-e", "DISPLAY=:0", "-e", &format!("CONTAINER_ID={}", agent_id), "-e", &format!("ANTHROPIC_API_KEY={}", env::var("ANTHROPIC_API_KEY").map_err(|e| e.to_string())?), "-e", "GEOMETRY=1920x1080", "-e", "HOST_IP=host.containers.internal", "-p", &format!("{}:5900", ports[0]), "-p", &format!("{}:6080", ports[1]), "--name", &container_name, "minimal-vnc-desktop"])
         .output()
         .map_err(|e| e.to_string())?;
@@ -119,7 +121,7 @@ fn get_agent_container(agent_id: String) -> Option<Container> {
 #[tauri::command]
 async fn start_container(container_id: String) -> Result<(), String> {
     println!("Starting container: {}", container_id);
-    tokio::process::Command::new("podman")
+    tokio::process::Command::new("/opt/homebrew/bin/podman")
         .args(&["start", &container_id])
         .output()
         .await
@@ -198,6 +200,7 @@ fn clear_all_messages(app_handle: tauri::AppHandle) {
 //read all user data
 #[tauri::command]
 fn get_user_data() -> User {
+    log::info!("Tauri is awesome!");
     let user = USER.lock().unwrap();
     user.clone()
 }
@@ -230,16 +233,27 @@ fn get_agent_messages(agent_id: String) -> Vec<serde_json::Value> {
     messages_array
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     dotenv().ok();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        // .plugin(
+        //     tauri_plugin_log::Builder::new()
+        //     .target(tauri_plugin_log::Target::new(
+        //         tauri_plugin_log::TargetKind::Folder {
+        //           path: std::path::PathBuf::from("/Users/patrickfoster/Desktop/radah-logs"),
+        //           file_name: None,
+        //         },
+        //       ))
+        //         .build()
+        // )
         .setup(|app| {
+            info!("Setting up app here - run 4!");
             // Store the app handle globally
             *APP_HANDLE.lock().unwrap() = Some(app.handle().clone());
 
+            info!("Setting up app here 2!");
             // Check for podman and install if needed
             let _ = tauri::async_runtime::block_on(podman_setup());
             // Load containers on startup
@@ -249,17 +263,21 @@ pub fn run() {
                 // Start all containers using the helper function
                 tauri::async_runtime::spawn(start_all_containers(containers));
             }
+            info!("Setting up app here 3!");
 
             // Add this: Load messages on startup
             if let Ok(messages) = load_messages(&app.handle()) {
                 let mut stored_messages = MESSAGES.lock().unwrap();
                 *stored_messages = messages;
             }
+            info!("Setting up app here 4!");
 
             // Start the WebSocket server in an async task
             tauri::async_runtime::spawn(async move {
                 start_websocket_server().await;
             });
+
+            info!("Setting up app here 5!");
 
             Ok(())
         })

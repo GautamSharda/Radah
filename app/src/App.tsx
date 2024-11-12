@@ -107,9 +107,11 @@ export default function App() {
       setAgents((currentAgents) => {
         return currentAgents.map(agent => agent.agent_id === newAgent.agent_id ? { ...containerInfo } : agent);
       });
-    } catch {
+    } catch (error) {
       setAgents((agents).map(agent => agent.agent_id === newAgent.agent_id ? { ...newAgent, error: 'Failed to create container', loading: false } : agent));
-      setError({ primaryMessage: "Oops! We had an issue creating your agent. Try creating one again or reach out to support.", timeout: 7500 });
+      console.log(error);
+      //@ts-ignore
+      setError({ primaryMessage: error, timeout: 750000 });
     }
   };
 

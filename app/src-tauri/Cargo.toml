@@ -31,3 +31,5 @@ uuid = { version = "1.7.0", features = ["v4"] }
 tokio-rustls = "0.24"
 rustls = "0.21"
 chrono = "0.4"
+log = "0.4"
+tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", branch = "v2" }
