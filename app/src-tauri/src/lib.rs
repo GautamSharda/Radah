@@ -91,7 +91,7 @@ async fn create_agent_container(
         "-d", "--network", "bridge", 
         "-e", "DISPLAY=:0", 
         "-e", &format!("CONTAINER_ID={}", agent_id), 
-        "-e", &format!("ANTHROPIC_API_KEY={}", "replace this gautam")
+        "-e", &format!("ANTHROPIC_API_KEY={}", "replace this gautam"),
         "-e", "GEOMETRY=1920x1080", 
         "-e", "HOST_IP=host.containers.internal", 
         "-p", &format!("{}:5900", ports[0]), 
@@ -251,21 +251,27 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            let splashscreen_window = app.get_webview_window("splashscreen").unwrap();
+            let main_window = app.get_webview_window("main").unwrap();
+
             info!("Setting up app here - run 4!");
             // Store the app handle globally
             *APP_HANDLE.lock().unwrap() = Some(app.handle().clone());
 
             info!("Setting up app here 2!");
+            println!("Setting up app here 2!");
             // Check for podman and install if needed
             let _ = tauri::async_runtime::block_on(podman_setup());
+            println!("Podman setup complete!");
             // Load containers on startup
             if let Ok(containers) = load_containers(&app.handle()) {
                 let mut stored_containers = CONTAINERS.lock().unwrap();
                 *stored_containers = containers.clone();
                 // Start all containers using the helper function
-                tauri::async_runtime::spawn(start_all_containers(containers));
+                tauri::async_runtime::block_on(start_all_containers(containers));
             }
             info!("Setting up app here 3!");
+            println!("Setting up app here 3!");
 
             // Add this: Load messages on startup
             if let Ok(messages) = load_messages(&app.handle()) {
@@ -273,13 +279,16 @@ pub fn run() {
                 *stored_messages = messages;
             }
             info!("Setting up app here 4!");
+            println!("Setting up app here 4!");
 
             // Start the WebSocket server in an async task
             tauri::async_runtime::spawn(async move {
+                println!("Starting WebSocket server!");
                 start_websocket_server().await;
             });
 
-            info!("Setting up app here 5!");
+            splashscreen_window.close().unwrap();
+            main_window.show().unwrap();
 
             Ok(())
         })

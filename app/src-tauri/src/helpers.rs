@@ -123,16 +123,24 @@ pub fn load_messages<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<std::colle
 }
 
 pub async fn start_all_containers(containers: Vec<Container>) {
+    let mut handles = Vec::new();
+
     for container in containers {
         let container_id = container.id.clone();
         println!("Starting container: {}", container_id);
         
-        tauri::async_runtime::spawn(async move {
+        let handle = tauri::async_runtime::spawn(async move {
             match super::start_container(container_id.clone()).await {
                 Ok(_) => println!("Successfully started container {}", container_id),
                 Err(e) => eprintln!("Failed to start container {}: {}", container_id, e),
             }
         });
+
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        let _ = handle.await;
     }
 }
 

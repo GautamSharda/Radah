@@ -60,8 +60,14 @@ export default function App() {
 
 
   useEffect(() => {
-    loadUser();
-    loadExistingAgents();
+    const initialize = async () => {
+      await loadUser();
+      await loadExistingAgents();
+      // Close splash screen after initialization
+      // await core.invoke('close_splashscreen');
+    };
+
+    initialize();
   }, []);
 
   async function loadUser() {

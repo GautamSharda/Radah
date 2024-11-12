@@ -14,7 +14,16 @@
       {
         "title": "Radah",
         "width": 1024,
-        "height": 768
+        "height": 768,
+        "visible": false
+      },
+      {
+        "width": 250,
+        "height": 250,
+        "decorations": false,
+        "url": "splashscreen.html",
+        "label": "splashscreen",
+        "center": true
       }
     ],
     "security": {
