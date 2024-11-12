@@ -102,7 +102,9 @@ async fn create_agent_container(
         .map_err(|e| e.to_string())?;
 
     if !run_output.status.success() {
-        return Err("Failed to start container".to_string());
+        let error_message = String::from_utf8_lossy(&run_output.stderr).to_string();
+        error!("Failed to start container: {}", error_message);
+        return Err(error_message);
     }
 
     let container = Container {

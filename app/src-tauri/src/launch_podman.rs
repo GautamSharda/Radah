@@ -42,7 +42,7 @@ async fn install_podman() -> Result<(), String> {
 
     let brew_check = std::path::Path::new("/opt/homebrew/bin/brew").exists() || std::path::Path::new("/usr/local/bin/").exists();
 
-    info!("brew_check 2.3: {}", brew_check);
+    info!("brew_check 2.5: {}", brew_check);
 
     if !brew_check {
         let err_msg = "Failed to check for brew: Homebrew not found".to_string();
