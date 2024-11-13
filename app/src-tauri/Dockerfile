@@ -32,7 +32,6 @@ RUN apt-get update && apt-get install -y \
 
 # Create a non-root user
 RUN useradd -m -s /bin/bash vncuser
-RUN echo "vncuser:vncpassword" | chpasswd
 
 USER vncuser
 RUN mkdir -p /home/vncuser/.vnc
@@ -82,3 +81,20 @@ ENV ANTHROPIC_API_KEY=""
 ENTRYPOINT ["/bin/bash", "-c", "export CONTAINER_ID=${CONTAINER_ID} && export HOST_IP=${HOST_IP} && export ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} && /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"]
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+
+# Add these lines to disable screen locking and screensaver
+RUN mkdir -p /home/vncuser/.config/xfce4/xfconf/xfce-perchannel-xml && \
+    echo '<?xml version="1.0" encoding="UTF-8"?>\n\
+<channel name="xfce4-screensaver" version="1.0">\n\
+  <property name="enabled" type="bool" value="false"/>\n\
+  <property name="lock-enabled" type="bool" value="false"/>\n\
+</channel>' > /home/vncuser/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml && \
+    echo '<?xml version="1.0" encoding="UTF-8"?>\n\
+<channel name="xfce4-power-manager" version="1.0">\n\
+  <property name="xfce4-power-manager" type="empty">\n\
+    <property name="dpms-enabled" type="bool" value="false"/>\n\
+    <property name="blank-on-ac" type="int" value="0"/>\n\
+    <property name="lock-screen-suspend-hibernate" type="bool" value="false"/>\n\
+  </property>\n\
+</channel>' > /home/vncuser/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
+    chown -R vncuser:vncuser /home/vncuser/.config

@@ -21,7 +21,9 @@ vncserver $DISPLAY \
 # Wait for VNC server to start
 sleep 2
 
-# Start Xfce session
+# Start Xfce session with screensaver disabled
+DISPLAY=:0 xfconf-query -c xfce4-screensaver -p /enabled -n -t bool -s false
+DISPLAY=:0 xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-enabled -n -t bool -s false
 DISPLAY=:0 startxfce4 &
 
 # Keep the script running
