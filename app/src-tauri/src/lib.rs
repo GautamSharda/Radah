@@ -82,10 +82,27 @@ async fn create_agent_container(
         Command::new("/opt/homebrew/bin/podman").args(&["rm", "-f", &container_name]).output().map_err(|e| e.to_string())?;
     }
 
-    // Build image
-    Command::new("/opt/homebrew/bin/podman").args(&["build", "-t", "minimal-vnc-desktop", env!("CARGO_MANIFEST_DIR")]).output().map_err(|e| format!("Build failed: {}", e.to_string()))?;
+    // Build image with proper context and tag
+    let build_output = Command::new("/opt/homebrew/bin/podman")
+        .args(&[
+            "build",
+            "-t",
+            "localhost/minimal-vnc-desktop:latest",  // Use fully qualified image name
+            "-f",  // Specify Dockerfile
+            "Dockerfile",  // Dockerfile name
+            "."   // Build context
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))  // Set working directory to src-tauri
+        .output()
+        .map_err(|e| format!("Build failed: {}", e.to_string()))?;
 
-    // Run container
+    if !build_output.status.success() {
+        let error_message = String::from_utf8_lossy(&build_output.stderr).to_string();
+        error!("Failed to build image: {}", error_message);
+        return Err(error_message);
+    }
+
+    // Run container with the locally built image
     let run_output = Command::new("/opt/homebrew/bin/podman")
         .args(&["run", 
         "-d", "--network", "bridge", 
@@ -97,7 +114,7 @@ async fn create_agent_container(
         "-p", &format!("{}:5900", ports[0]), 
         "-p", &format!("{}:6080", ports[1]), 
         "--name", &container_name, 
-        "minimal-vnc-desktop"])
+        "localhost/minimal-vnc-desktop:latest"])  // Use the locally built image
         .output()
         .map_err(|e| e.to_string())?;
 
