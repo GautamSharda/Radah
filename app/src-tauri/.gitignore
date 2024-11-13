@@ -60,3 +60,10 @@ coverage
 
 # Environment variables
 .env
+
+
+# Add these lines to your existing .gitignore
+image/**/__pycache__
+image/**/*.pyc
+image/**/*.pyo
+image/**/*.pyd

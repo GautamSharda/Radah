@@ -40,6 +40,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "Dockerfile",
+      "novnc_startup.sh",
+      "startup.sh",
+      "supervisord.conf",
+      "image/**/*"
+    ],
     "macOS": {
       "signingIdentity": "Developer ID Application: Gautam Sharda (44HG236YTQ)",
       "providerShortName": "44HG236YTQ"

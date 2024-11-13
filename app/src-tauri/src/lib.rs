@@ -5,6 +5,8 @@ use once_cell::sync::Lazy;
 use serde::{Serialize, Deserialize};
 use tauri::Manager;
 use dotenv::dotenv;
+use tauri::utils::assets::{resource_relpath, EmbeddedAssets};
+use std::path::PathBuf;
 
 use log::{info, error};
 
@@ -66,6 +68,12 @@ async fn get_prompt_running(agent_id: String) -> String {
     AGENT_CONNECTIONS.lock().await.get(&agent_id).map(|conn| conn.prompt_running.clone()).unwrap_or("na".to_string())
 }
 
+fn get_resource_path(app_handle: &tauri::AppHandle, resource: &str) -> PathBuf {
+    app_handle.path().resource_dir()
+        .expect("Failed to get resource dir")
+        .join(resource)
+}
+
 #[tauri::command]
 async fn create_agent_container(
     app_handle: tauri::AppHandle,
@@ -82,17 +90,18 @@ async fn create_agent_container(
         Command::new("/opt/homebrew/bin/podman").args(&["rm", "-f", &container_name]).output().map_err(|e| e.to_string())?;
     }
 
-    // Build image with proper context and tag
+    let dockerfile_path = get_resource_path(&app_handle, "Dockerfile");
+
     let build_output = Command::new("/opt/homebrew/bin/podman")
         .args(&[
             "build",
             "-t",
-            "localhost/minimal-vnc-desktop:latest",  // Use fully qualified image name
-            "-f",  // Specify Dockerfile
-            "Dockerfile",  // Dockerfile name
-            "."   // Build context
+            "localhost/minimal-vnc-desktop:latest",
+            "-f",
+            &dockerfile_path.to_string_lossy(),
+            "."
         ])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))  // Set working directory to src-tauri
+        .current_dir(dockerfile_path.parent().unwrap())
         .output()
         .map_err(|e| format!("Build failed: {}", e.to_string()))?;
 
