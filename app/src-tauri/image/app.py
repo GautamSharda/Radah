@@ -2,16 +2,17 @@ import websockets
 import json
 import asyncio
 import os
-# import aiohttp
+import base64
 from collections import deque
 from pam import run_pam
+import platform
 
 #Config
-HEARTBEAT = False
 MOCKDATA = False
 
 # Global variables
 prompt_running = ["stopped"] #"running", "stopped", "loading", "na"
+
 # Global message queue
 message_queue = deque()
 
@@ -22,14 +23,43 @@ RUNNING_LOCALLY = False
 if not HOST_IP:
     HOST_IP = "localhost"
     RUNNING_LOCALLY = True
-#is running loc
 
 
 def get_prompt_running():
     return prompt_running[0]
 
 
+async def process_incoming_files(agent_id, files):
+    for file in files:
+        file_name = file.get("name")
+        file_data = file.get("data")
+        if file_name and file_data:
+            try:
+                # Extract the base64 data after the comma
+                base64_data = file_data.split(',')[1]
+                decoded_data = base64.b64decode(base64_data)
+                
+                base_path = os.path.expanduser("~/Desktop")
+                
+                # Create agent-specific directory within the base path
+                file_path = os.path.join(base_path, "uploaded-files")
+                print(f"Creating directory {file_path}")
+                os.makedirs(file_path, exist_ok=True)
+                full_path = os.path.join(file_path, file_name)
 
+                print(f"Saving file {file_name} to {full_path}")
+                
+                # Save the file
+                with open(full_path, "wb") as f:
+                    f.write(decoded_data)
+                print(f"Successfully saved file {file_name} to {full_path}")
+                
+            except IndexError:
+                print(f"Error: Invalid base64 data format for file {file_name}")
+            except base64.binascii.Error:
+                print(f"Error: Invalid base64 encoding for file {file_name}")
+            except Exception as e:
+                print(f"Error processing file {file_name}: {str(e)}")
 
 async def main(agent_id):
     # Run both coroutines concurrently using asyncio.gather()
@@ -63,14 +93,22 @@ async def run_websocket_client(message_queue, agent_id):
         message_buffers = {}  # Use a dictionary to store message buffers by message_id
         
         async def promptMessageHandler(json_message):
+            print(f"Prompt message handler: {json_message}")
             if json_message["message-type"] != "prompt" or prompt_running[0] != "stopped" or "text" not in json_message:
                 return
             prompt_running[0] = "running"
+            files = json_message.get("files", [])
+            print(len(files))
+            if files and len(files) > 0:
+                print('we got files')
+                await process_incoming_files(agent_id, files)
 
             recent_messages = [message["agent-message"] for message in json_message.get("recent-messages", []) if "agent-message" in message]
 
+            additional_system_prompt = json_message.get("additional_system_prompt", "")
+            print(f"Additional system prompt: {additional_system_prompt}")
             try:
-                await run_pam(message_queue, json_message["text"], recent_messages, get_prompt_running, MOCKDATA)
+                await run_pam(message_queue, json_message["text"], recent_messages, get_prompt_running, MOCKDATA, additional_system_prompt)
             except Exception as e:
                 message_queue.append({"message-type": "message", "text": f"Error running Pam: {str(e)}", "error": True, "show_ui": True })
                 print(f"Error running Pam: {e}")
@@ -86,8 +124,6 @@ async def run_websocket_client(message_queue, agent_id):
                         message = await ws_connection.recv()
                         json_message = json.loads(message)
                         print(f"Received message: {json_message}\n\n")
-
-                        # Handle chunked messages
                         if "message_id" in json_message and "chunk" in json_message and "total_chunks" in json_message:
                             message_id = json_message["message_id"]
                             chunk = json_message["chunk"]
@@ -124,11 +160,6 @@ async def run_websocket_client(message_queue, agent_id):
             if ws_connection and message_queue:
                 try:
                     message = message_queue[0]  # Peek at first message
-                    #We don't need this rn because the UI handles finding the images
-                    # if 'agent-message' in message and not doesMessageNotHaveAnImage(message['agent-message']):
-                    #     print('showing ui')
-                    #     print(message)
-                    #     message['show_ui'] = True
                     json_message = json.dumps(message)
                     await ws_connection.send(json_message)
                     message_queue.popleft()  # Only remove after successful send
@@ -138,38 +169,22 @@ async def run_websocket_client(message_queue, agent_id):
                     await connect()
             await asyncio.sleep(0.1)  # Small delay to prevent busy waiting
 
-    async def heartbeat():
-        if HEARTBEAT:
-            while True:
-                print("Sending heartbeat")
-                message_queue.append({"message-type": "message", "text": "Heartbeat ping", "show_ui": True })
-                await asyncio.sleep(10)  # Wait 10 seconds before next heartbeat
-
     # Connect and start message handler, queue processor and heartbeat
     ws_connection = await connect()
     await asyncio.gather(
         message_handler(),
         process_queue(),
-        heartbeat()
     )
 
-# def doesMessageNotHaveAnImage(message):
-#     try:
-#         if "content" in message:
-#             res = True
-#             for sub_message in message["content"]:
-#                 if not doesMessageNotHaveAnImage(sub_message):
-#                     return False
-#             return res
-#         elif "type" in message and message["type"] == "image":
-#             return False
-#         else:
-#             return True
-#     except Exception as e:
-#         return True
+def ensure_upload_directory():
+    upload_dir = "agent_files"
+    if not os.path.exists(upload_dir):
+        os.makedirs(upload_dir)
+    print(f"Upload directory set to: {upload_dir}")
 
 # if name is main
 if __name__ == "__main__":
+    #ensure_upload_directory()
     agent_id = os.getenv("CONTAINER_ID")
     if RUNNING_LOCALLY:
         agent_id = "pam-1"

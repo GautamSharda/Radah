@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { ChevronRight, ChevronLeft } from "lucide-react"
-import { Message } from "@/App";
+import { Agent, Message } from "@/App";
 import { MessageInput } from "./view-agent/MessageInput";
 import { MessageBubble } from "./view-agent/MessageBubble";
 import { promptRunningType } from "./AgentSection";
@@ -10,13 +10,14 @@ import { useRef, useEffect } from "react";
 interface RightSidebarProps {
   messages: Message[];
   agentId: string | undefined;
-  sendMessage: (message: string) => void;
+  sendMessage: (message: string, files: { name: string; data: string }[] | undefined) => void;
   promptRunning: promptRunningType;
   stopAgent: () => void;
-  isWebSocketOpen: boolean
+  isWebSocketOpen: boolean;
+  setEditSystemPromptPopup: (value: boolean) => void;
 }
 
-export function RightSidebar({ messages, agentId, sendMessage, promptRunning, stopAgent, isWebSocketOpen }: RightSidebarProps) {
+export function RightSidebar({ messages, agentId, sendMessage, promptRunning, stopAgent, isWebSocketOpen, setEditSystemPromptPopup }: RightSidebarProps) {
   const { isOpen } = useRightSidebar()
   const prevHeightRef = useRef(0);
   const prevMessagesLengthRef = useRef(0);
@@ -71,7 +72,6 @@ export function RightSidebar({ messages, agentId, sendMessage, promptRunning, st
     }
   }
 
-
   return (
     <div
       className={`
@@ -103,6 +103,7 @@ export function RightSidebar({ messages, agentId, sendMessage, promptRunning, st
             currentAgentID={agentId}
             stopAgent={stopAgent}
             isWebSocketOpen={isWebSocketOpen}
+            setEditSystemPromptPopup={setEditSystemPromptPopup}
           />}
         </div>
       </div>

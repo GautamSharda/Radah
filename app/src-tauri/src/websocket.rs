@@ -145,28 +145,6 @@ async fn handle_init_message(
     }
 }
 
-async fn process_message(
-    message_id: String,
-    json_message: serde_json::Value,
-    agent_id: &str,
-    app_handle: &tauri::AppHandle,
-) {
-    if let Some(client_conn) = CLIENT_CONNECTION.lock().await.as_ref() {
-        let json_string = serde_json::to_string(&json_message).unwrap();
-        client_conn.lock().await.send(warp::ws::Message::text(json_string)).await.unwrap();
-    }
-
-    let mut messages = MESSAGES.lock().unwrap();
-    messages.insert(message_id.clone(), json_message);
-    save_messages(&app_handle, &messages).unwrap();
-
-    let mut containers = CONTAINERS.lock().unwrap();
-    if let Some(container) = containers.iter_mut().find(|c| c.agent_id == agent_id) {
-        container.message_ids.push(message_id);
-        save_containers(&app_handle, &containers).unwrap();
-    }
-}
-
 async fn handle_agent_message(
     conn_id: &str,
     _tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>,
@@ -194,7 +172,7 @@ async fn handle_client_message(
     _tx: &Arc<AsyncMutex<futures::stream::SplitSink<warp::ws::WebSocket, warp::ws::Message>>>,
     mut json: serde_json::Value,
     app_handle: tauri::AppHandle,
-    get_recents_messages: bool,
+    is_prompt: bool,
 ) {
     let agent_id = json.get("agent_id")
         .and_then(|v| v.as_str())
@@ -206,10 +184,20 @@ async fn handle_client_message(
             conn_info.prompt_running = "running".to_string();
             
             let mut json_with_history = json.clone();
-            if get_recents_messages {
+            if is_prompt {
                 if let serde_json::Value::Object(ref mut map) = json_with_history {
                     let recent_messages = get_recent_agent_messages(agent_id_value.clone(), 5);
                     map.insert("recent-messages".to_string(), serde_json::Value::Array(recent_messages));
+
+                    // Get system prompt from CONTAINERS
+                    let containers = CONTAINERS.lock().unwrap();
+                    if let Some(container) = containers.iter().find(|c| c.agent_id == agent_id_value) {
+                        map.insert(
+                            "additional_system_prompt".to_string(), 
+                            serde_json::Value::String(container.system_prompt.clone())
+                        );
+                        println!("System prompt: {}", container.system_prompt);
+                    }
                 }
             }
 
@@ -218,6 +206,7 @@ async fn handle_client_message(
                 map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
             }
 
+            // Send complete message (including files) to agent
             let json_string = serde_json::to_string(&json_with_history).unwrap();
             let chunk_size = 1024;
             let total_chunks = (json_string.len() + chunk_size - 1) / chunk_size;
@@ -238,10 +227,37 @@ async fn handle_client_message(
         
         let message_id = uuid::Uuid::new_v4().to_string();
 
-        if let serde_json::Value::Object(ref mut map) = json {
+        // Create a version of the message for storage without the files field
+        let storage_json = if let serde_json::Value::Object(mut map) = json {
+            map.remove("files"); // Remove files field before storage
             map.insert("message_id".to_string(), serde_json::Value::String(message_id.clone()));
-        }
+            serde_json::Value::Object(map)
+        } else {
+            json
+        };
 
-        process_message(message_id, json, &agent_id_value, &app_handle).await;
+        process_message(message_id, storage_json, &agent_id_value, &app_handle).await;
     }
 } 
+
+async fn process_message(
+    message_id: String,
+    json_message: serde_json::Value,
+    agent_id: &str,
+    app_handle: &tauri::AppHandle,
+) {
+    if let Some(client_conn) = CLIENT_CONNECTION.lock().await.as_ref() {
+        let json_string = serde_json::to_string(&json_message).unwrap();
+        client_conn.lock().await.send(warp::ws::Message::text(json_string)).await.unwrap();
+    }
+
+    let mut messages = MESSAGES.lock().unwrap();
+    messages.insert(message_id.clone(), json_message);
+    save_messages(&app_handle, &messages).unwrap();
+
+    let mut containers = CONTAINERS.lock().unwrap();
+    if let Some(container) = containers.iter_mut().find(|c| c.agent_id == agent_id) {
+        container.message_ids.push(message_id);
+        save_containers(&app_handle, &containers).unwrap();
+    }
+}

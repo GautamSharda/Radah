@@ -9,11 +9,12 @@ import { useError } from "@/hooks/ErrorContext";
 interface AgentProps {
     user?: User;
     currentAgent: Agent | undefined;
+    setEditSystemPromptPopup: (value: boolean) => void;
 }
 
 export type promptRunningType = "running" | "stopped" | "loading" | "na";
 
-export default function AgentSection({ user, currentAgent }: AgentProps) {
+export default function AgentSection({ user, currentAgent, setEditSystemPromptPopup }: AgentProps) {
     const { setError } = useError();
     const [messages, setMessages] = useState<Message[]>([]);
     const [ws, setWs] = useState<WebSocket | null>(null);
@@ -21,13 +22,15 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
     const [promptRunning, setPromptRunning] = useState<promptRunningType>("na");
     const [switchingAgent, setSwitchingAgent] = useState<boolean>(true);
     const agentId = currentAgent?.agent_id;
+    //@ts-ignore
+    const container_id = currentAgent?.id;
     useEffect(() => {
         const loadAgent = async () => {
             try {
                 //@ts-ignore
-                if (!agentId || !currentAgent?.id) return;
+                if (!agentId || !container_id) return;
                 //@ts-ignore
-                await core.invoke('start_container', { containerId: currentAgent?.id });
+                await core.invoke('start_container', { containerId: container_id });
                 //wait 2 seconds
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 const messages = await core.invoke<Message[]>('get_agent_messages', { agentId });
@@ -42,7 +45,7 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
         loadAgent();
         setPromptRunning("na");
         setSwitchingAgent(true);
-    }, [currentAgent]);
+    }, [agentId, container_id]);
 
     function sendMessage(message: string) {
         if (ws && ws.readyState === WebSocket.OPEN) ws.send(message);
@@ -105,9 +108,11 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
         ws?.send(JSON.stringify({ "message-type": "stop", "agent_id": agentId, "show_ui": false }));
     }
 
-    const sendMessageWrapper = (prompt: string) => {
+    const sendMessageWrapper = (prompt: string, files: { name: string; data: string }[] | undefined) => {
         if (!agentId) return;
         const message = { "message-type": "prompt", "text": prompt, "agent_id": agentId, "show_ui": true };
+        //@ts-ignore
+        if (files) message['files'] = files;
         setPromptRunning("running");
         sendMessage(JSON.stringify(message));
     }
@@ -115,7 +120,15 @@ export default function AgentSection({ user, currentAgent }: AgentProps) {
     return (
         <>
             <ViewAgent showControls={user ? user.show_controls : false} agent={currentAgent} switchingAgent={switchingAgent} />
-            <RightSidebar messages={messages} agentId={agentId} sendMessage={sendMessageWrapper} promptRunning={promptRunning} stopAgent={stopAgent} isWebSocketOpen={isWebSocketOpen} />
+            <RightSidebar
+                messages={messages}
+                agentId={agentId}
+                sendMessage={sendMessageWrapper}
+                promptRunning={promptRunning}
+                stopAgent={stopAgent}
+                isWebSocketOpen={isWebSocketOpen}
+                setEditSystemPromptPopup={setEditSystemPromptPopup}
+            />
         </>
     )
 }

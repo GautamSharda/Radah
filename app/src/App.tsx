@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { core } from '@tauri-apps/api';
+import { core, event } from '@tauri-apps/api';
 import { SidebarProvider } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
 import { RightSidebarProvider } from "@/components/RightSidebar"
-import RenderCard from "./components/RenderCard";
+import RenderCard from "./components/helpers/RenderCard";
 import AgentSection from "./components/AgentSection";
 import { useError } from "./hooks/ErrorContext";
 import Alert from "./components/helpers/Alert";
+import { LeftSideBar } from "./components/LeftSideBar";
+import EditSystemPromptPopup from "./components/helpers/EditSystemPromptPopup";
 
 export interface User {
   show_controls: boolean;
@@ -16,8 +17,10 @@ export interface User {
 export interface BaseContainer {
   number: number;
   agent_type: 'jim' | 'pam';
+  agent_name: string;
   message_ids: string[];
   agent_id: string;
+  system_prompt: string;
 }
 
 export interface Container extends BaseContainer {
@@ -49,26 +52,38 @@ export interface Message extends BaseMessage {
 
 export default function App() {
   const { error, setError } = useError();
-  const [step, setStep] = useState<number | null>(null);
-  const [selectedAssistant, setSelectedAssistant] = useState<string | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [user, setUser] = useState<User | undefined>(undefined);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-
+  const [newAgentPopup, setNewAgentPopup] = useState<boolean>(false);
+  const [editSystemPromptPopup, setEditSystemPromptPopup] = useState<boolean>(false);
+  const [isSetupComplete, setIsSetupComplete] = useState(false);
   // WebSocket
   const currentAgent = selectedAgentId ? agents.find(agent => agent.agent_id === selectedAgentId) || undefined : undefined;
 
+  useEffect(() => {
+    // Listen for setup completion event
+    const unlisten = event.listen('setup-complete', () => { setIsSetupComplete(true) });
+
+    // Check if setup is already complete (in case we missed the event)
+    checkSetupStatus();
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, []);
+
+  async function checkSetupStatus() {
+    const isComplete = await core.invoke<boolean>('is_setup_complete');
+    if (isComplete) setIsSetupComplete(true);
+  }
 
   useEffect(() => {
-    const initialize = async () => {
-      await loadUser();
-      await loadExistingAgents();
-      // Close splash screen after initialization
-      // await core.invoke('close_splashscreen');
-    };
-
-    initialize();
-  }, []);
+    // Only run initial loading when setup is complete
+    if (isSetupComplete) {
+      loadUser();
+      loadExistingAgents();
+    }
+  }, [isSetupComplete]);
 
   async function loadUser() {
     try {
@@ -76,7 +91,6 @@ export default function App() {
       // await core.invoke<User>('clear_all_storage');
       // await core.invoke<User>('print_all_storage');
       // await core.invoke<User>('clear_all_messages');
-      // await core.invoke<User>('print_all_storage');
       setUser(user);
     } catch (error) {
       setError({ primaryMessage: "We had an issue loading your settings", timeout: 2500, type: 'warning' });
@@ -89,27 +103,30 @@ export default function App() {
       setAgents(containers);
       if (containers.length > 0) return setSelectedAgentId(containers[0].agent_id);
       setSelectedAgentId(null);
-      setStep(0);
+      setNewAgentPopup(true);
     } catch (error) {
       setError({ primaryMessage: "Oops! We had an issue getting your agents. Refresh and try again.", timeout: 5000 });
     }
   }
 
-  const handleCreateAssistant = async () => {
-    setStep(null);
+  const handleCreateAssistant = async (agentName: string) => {
+    setNewAgentPopup(false);
+    //remove this down the line when we have a way to select the assistant
+    const selectedAssistant = 'pam';
     const existingAgents = agents.filter(agent => agent.agent_type === selectedAssistant);
     const newAgentNumber = existingAgents.length + 1;
-    const newAgent: BuildingContainer = { agent_type: selectedAssistant as 'jim' | 'pam', message_ids: [], agent_id: `${selectedAssistant}-${newAgentNumber}`, number: newAgentNumber, loading: true, error: null };
+    const newAgent: BuildingContainer = { agent_type: selectedAssistant as 'jim' | 'pam', message_ids: [], agent_id: `${selectedAssistant}-${newAgentNumber}`, number: newAgentNumber, loading: true, error: null, agent_name: agentName, system_prompt: 'You are a helpful assistant.' };
     setAgents([...agents, newAgent]);
     setSelectedAgentId(newAgent.agent_id);
     try {
       const containerInfo = await core.invoke<Container>('create_agent_container', {
         agentId: newAgent.agent_id,
         agentType: selectedAssistant as 'jim' | 'pam',
+        agentName: agentName,
         number: newAgent.number,
-        messageIds: newAgent.message_ids
+        messageIds: newAgent.message_ids,
+        systemPrompt: newAgent.system_prompt
       });
-      await new Promise(resolve => setTimeout(resolve, 3000));
       setAgents((currentAgents) => {
         return currentAgents.map(agent => agent.agent_id === newAgent.agent_id ? { ...containerInfo } : agent);
       });
@@ -132,20 +149,18 @@ export default function App() {
       <SidebarProvider>
         <RightSidebarProvider>
           <div className="flex h-screen w-screen">
-            <AppSidebar
+            <LeftSideBar
               agents={agents}
-              onNewAgentClick={() => {
-                setStep(0);
-                setSelectedAssistant(null);
-              }}
+              onNewAgentClick={() => { setNewAgentPopup(true) }}
               selectedAgentId={selectedAgentId}
               onAgentSelect={setSelectedAgentId}
               user={user}
               setUser={setUser}
             />
-            <AgentSection user={user} currentAgent={currentAgent} />
+            <AgentSection user={user} currentAgent={currentAgent} setEditSystemPromptPopup={setEditSystemPromptPopup} />
           </div>
-          {step !== null && <RenderCard step={step} setStep={setStep} selectedAssistant={selectedAssistant} setSelectedAssistant={setSelectedAssistant} handleCreateAssistant={handleCreateAssistant} />}
+          {newAgentPopup && <RenderCard handleCreateAssistant={handleCreateAssistant} setNewAgentPopup={setNewAgentPopup} />}
+          {(editSystemPromptPopup && currentAgent) && <EditSystemPromptPopup setEditSystemPromptPopup={setEditSystemPromptPopup} agent={currentAgent} setAgents={setAgents} />}
         </RightSidebarProvider>
       </SidebarProvider>
     </>

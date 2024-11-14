@@ -1,4 +1,4 @@
-import { Plus, Briefcase, Zap } from "lucide-react"
+import { Plus, Zap } from "lucide-react"
 
 import {
   Sidebar,
@@ -11,12 +11,11 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Switch } from "./ui/switch";
 import { User } from "@/App";
 import { Agent } from "@/App";
 import { core } from "@tauri-apps/api";
 import { useError } from "@/hooks/ErrorContext";
-interface AppSidebarProps {
+interface LeftSideBarProps {
   agents: Agent[];
   user: User | undefined;
   setUser: (user: User) => void;
@@ -25,7 +24,7 @@ interface AppSidebarProps {
   onAgentSelect: (agentId: string) => void;
 }
 
-export function AppSidebar({ agents, onNewAgentClick, selectedAgentId, onAgentSelect, user, setUser }: AppSidebarProps) {
+export function LeftSideBar({ agents, onNewAgentClick, selectedAgentId, onAgentSelect, user, setUser }: LeftSideBarProps) {
   const { setError } = useError();
 
   async function toggleSwitch() {
@@ -53,17 +52,8 @@ export function AppSidebar({ agents, onNewAgentClick, selectedAgentId, onAgentSe
                   variant={selectedAgentId === agentId ? "default" : "secondary"}
                   onClick={() => onAgentSelect(agentId)}
                 >
-                  {agent.agent_type === 'jim' ? (
-                    <>
-                      <Briefcase className="mr-2 h-4 w-4" />
-                      J.I.M {agent.number}
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="mr-2 h-4 w-4" />
-                      P.A.M {agent.number}
-                    </>
-                  )}
+                  <Zap className="mr-2 h-4 w-4" />
+                  {agent.agent_name}
                 </Button>
               );
             })}
@@ -78,14 +68,14 @@ export function AppSidebar({ agents, onNewAgentClick, selectedAgentId, onAgentSe
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            {
+            {/* {
               user && (
                 <div className="w-full justify-between flex items-center">
                   <p>Hide computer controls</p>
                   <Switch checked={!user.show_controls} onCheckedChange={toggleSwitch} />
                 </div>
               )
-            }
+            } */}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

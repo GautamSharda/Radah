@@ -7,6 +7,9 @@ use tauri::Manager;
 use dotenv::dotenv;
 use tauri::utils::assets::{resource_relpath, EmbeddedAssets};
 use std::path::PathBuf;
+use tauri::Wry;
+use tauri::Runtime;
+use tauri::Emitter;
 
 use log::{info, error};
 
@@ -45,8 +48,10 @@ pub struct Container {
     pub vnc_port: u16,
     pub number: i32,
     pub agent_type: String,
+    pub agent_name: String,
     pub message_ids: Vec<String>,
     pub agent_id: String,
+    pub system_prompt: String,
 }
 
 //Containers
@@ -56,6 +61,15 @@ pub static CONTAINERS: Lazy<Mutex<Vec<Container>>> = Lazy::new(|| {
 
 // Add this near your other static variables
 static APP_HANDLE: Lazy<Mutex<Option<tauri::AppHandle>>> = Lazy::new(|| Mutex::new(None));
+
+// Add this near your other static variables
+static SETUP_COMPLETE: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(false));
+
+// Add this command to check setup status
+#[tauri::command]
+fn is_setup_complete() -> bool {
+    *SETUP_COMPLETE.lock().unwrap()
+}
 
 // Add this helper function
 pub fn get_app_handle() -> Option<tauri::AppHandle> {
@@ -79,9 +93,12 @@ async fn create_agent_container(
     app_handle: tauri::AppHandle,
     agent_id: String,
     agent_type: String,
+    agent_name: String,
     number: i32,
     message_ids: Vec<String>,
+    system_prompt: String
 ) -> Result<Container, String> {
+    println!("Creating agent container!");
     let ports = get_available_ports().map_err(|e| e.to_string())?;
     let container_name = format!("agent-{}", agent_id);
 
@@ -138,8 +155,10 @@ async fn create_agent_container(
         vnc_port: ports[1],
         agent_id,
         agent_type,
+        agent_name,
         number,
         message_ids,
+        system_prompt
     };
 
     let mut containers = CONTAINERS.lock().unwrap();
@@ -164,6 +183,16 @@ async fn start_container(container_id: String) -> Result<(), String> {
         .output()
         .await
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn update_agent_system_prompt(agent_id: String, system_prompt: String) -> Result<(), String> {
+    let app_handle = get_app_handle().ok_or("Failed to get app handle")?;
+    let mut containers = CONTAINERS.lock().unwrap();
+    let container = containers.iter_mut().find(|c| c.agent_id == agent_id).ok_or("Container not found")?;
+    container.system_prompt = system_prompt;
+    save_containers(&app_handle, &containers).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -271,6 +300,63 @@ fn get_agent_messages(agent_id: String) -> Vec<serde_json::Value> {
     messages_array
 }
 
+
+async fn setup_app(app: tauri::AppHandle) -> Result<(), String> {
+    // Get windows before spawning
+    let splashscreen = app.get_webview_window("splashscreen");
+    let main = app.get_webview_window("main");
+
+    // Store the app handle globally
+    {
+        let mut handle = APP_HANDLE.lock().unwrap();
+        *handle = Some(app.clone());
+    }
+    // Check for podman and install if needed
+    podman_setup().await;  // Changed: remove block_on
+    
+    // Load containers on startup
+    if let Ok(containers) = load_containers(&app) {
+        {
+            let mut stored_containers = CONTAINERS.lock().unwrap();
+            *stored_containers = containers.clone();
+        }
+        // Start all containers using the helper function
+        start_all_containers(containers).await;  // Changed: remove block_on
+    }
+
+    // Add this: Load messages on startup
+    if let Ok(messages) = load_messages(&app) {
+        let mut stored_messages = MESSAGES.lock().unwrap();
+        *stored_messages = messages;
+    }
+
+    // Start the WebSocket server in an async task
+    tauri::async_runtime::spawn(async move {
+        println!("Starting WebSocket server!");
+        start_websocket_server().await;
+    });
+
+    // Mark setup as complete before handling windows
+    {
+        let mut setup_complete = SETUP_COMPLETE.lock().unwrap();
+        *setup_complete = true;
+    }
+
+    // Emit an event to notify frontend
+    app.emit("setup-complete", ()).map_err(|e| e.to_string())?;
+
+    // Handle windows at the end
+    if let Some(splashscreen_window) = splashscreen {
+        splashscreen_window.close().unwrap();
+    }
+    if let Some(main_window) = main {
+        main_window.show().unwrap();
+    }
+
+    Ok(())
+}
+
+
 pub fn run() {
     dotenv().ok();
 
@@ -329,7 +415,9 @@ pub fn run() {
             get_agent_messages,
             clear_all_messages,
             start_container,
-            get_prompt_running
+            get_prompt_running,
+            update_agent_system_prompt,
+            is_setup_complete
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
