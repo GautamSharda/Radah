@@ -1,7 +1,11 @@
 import { Message } from "@/App";
+import clsx from "clsx";
+import { CodeBlock, dracula, googlecode } from "react-code-blocks";
 
 
 const bubbleStyle = "px-4 py-2 rounded-3xl";
+const defaultCodeStyles = 'text-xs font-mono border border-primary rounded-sm w-full border-2'
+
 
 function InputActionSwitch(action: string): string {
     switch (action) {
@@ -26,6 +30,7 @@ function InputActionSwitch(action: string): string {
 
 
 export function MessageBubble({ message }: { message: Message }) {
+    console.log(message);
     if (message['agent-output']) {
         const agentOutput = message['agent-output'];
         if (agentOutput.text) {
@@ -39,6 +44,20 @@ export function MessageBubble({ message }: { message: Message }) {
             return (
                 <div>
                     <p className="italic">{InputActionSwitch(agentOutput.input.action)}</p>
+                </div>
+            )
+        }
+        if (agentOutput.input?.command) {
+            return (
+                <div className={clsx(defaultCodeStyles, 'flex flex-col items-start justify-start dark:hidden bg-white')}>
+                    <p className='italic ml-2 mt-2'>{agentOutput.name}</p>
+                    <CodeBlock
+                        text={agentOutput.input.command}
+                        language="bash"
+                        showLineNumbers={false}
+                        wrapLongLines={true}
+                        theme={googlecode}
+                    />
                 </div>
             )
         }

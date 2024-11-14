@@ -1,4 +1,4 @@
-import { Plus, Zap } from "lucide-react"
+import { Plus, Bot } from "lucide-react"
 
 import {
   Sidebar,
@@ -52,7 +52,7 @@ export function LeftSideBar({ agents, onNewAgentClick, selectedAgentId, onAgentS
                   variant={selectedAgentId === agentId ? "default" : "secondary"}
                   onClick={() => onAgentSelect(agentId)}
                 >
-                  <Zap className="mr-2 h-4 w-4" />
+                  <Bot className="mr-2 h-4 w-4" />
                   {agent.agent_name}
                 </Button>
               );

@@ -134,7 +134,7 @@ async fn create_agent_container(
         "-d", "--network", "bridge", 
         "-e", "DISPLAY=:0", 
         "-e", &format!("CONTAINER_ID={}", agent_id), 
-        "-e", &format!("ANTHROPIC_API_KEY={}", ""),
+        "-e", &format!("ANTHROPIC_API_KEY={}", env::var("ANTHROPIC_API_KEY").unwrap()),
         "-e", "GEOMETRY=1920x1080", 
         "-e", "HOST_IP=host.containers.internal", 
         "-p", &format!("{}:5900", ports[0]), 
