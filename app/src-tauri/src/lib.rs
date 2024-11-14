@@ -301,6 +301,60 @@ fn get_agent_messages(agent_id: String) -> Vec<serde_json::Value> {
 }
 
 
+//this command should delete the container from the database, then for each message id, delete the message from the database. then delete the podman container
+#[tauri::command]
+fn delete_agent_container(app_handle: tauri::AppHandle, agent_id: String) -> Result<(), String> {
+    // Find and remove container from CONTAINERS
+    let mut containers = CONTAINERS.lock().unwrap();
+    let container = containers
+        .iter()
+        .position(|c| c.agent_id == agent_id)
+        .ok_or("Container not found")?;
+    
+    // Get message IDs before removing container
+    let message_ids = containers[container].message_ids.clone();
+    let container_name = format!("agent-{}", agent_id);
+    
+    // Remove container from memory
+    containers.remove(container);
+    
+    // Delete messages
+    let mut messages = MESSAGES.lock().unwrap();
+    for message_id in message_ids {
+        messages.remove(&message_id);
+    }
+    
+    // Delete podman container
+    let output = Command::new("/opt/homebrew/bin/podman")
+        .args(&["rm", "-f", &container_name])
+        .output()
+        .map_err(|e| format!("Failed to delete container: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!("Failed to delete container: {}", 
+            String::from_utf8_lossy(&output.stderr)));
+    }
+    
+    // Save updated state to disk
+    save_containers(&app_handle, &containers)?;
+    save_messages(&app_handle, &messages)?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn update_agent_name(app_handle: tauri::AppHandle, agent_id: String, new_name: String) -> Result<(), String> {
+    let mut containers = CONTAINERS.lock().unwrap();
+    
+    if let Some(container) = containers.iter_mut().find(|c| c.agent_id == agent_id) {
+        container.agent_name = new_name;
+        save_containers(&app_handle, &containers)?;
+        Ok(())
+    } else {
+        Err("Container not found".to_string())
+    }
+}
+
 async fn setup_app(app: tauri::AppHandle) -> Result<(), String> {
     // Get windows before spawning
     let splashscreen = app.get_webview_window("splashscreen");
@@ -417,7 +471,9 @@ pub fn run() {
             start_container,
             get_prompt_running,
             update_agent_system_prompt,
-            is_setup_complete
+            is_setup_complete,
+            delete_agent_container,
+            update_agent_name,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

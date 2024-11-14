@@ -138,6 +138,40 @@ export default function App() {
     }
   };
 
+  const handleDeleteAgent = async (agentId: string) => {
+    const newAgents = agents.filter(agent => agent.agent_id !== agentId);
+    setAgents(newAgents);
+    if (newAgents.length === 0) {
+      setSelectedAgentId(null);
+      setNewAgentPopup(true);
+    } else {
+      setSelectedAgentId(newAgents[0].agent_id);
+    }
+    try {
+      await core.invoke('delete_agent_container', { agentId });
+    } catch (error) {
+      setError({ primaryMessage: "Oops! We had an issue deleting your agent. Refresh and try again.", timeout: 5000 });
+    }
+  };
+
+  const handleRenameAgent = async (agentId: string, newName: string) => {
+    try {
+      await core.invoke('update_agent_name', { agentId, newName });
+      setAgents(currentAgents =>
+        currentAgents.map(agent =>
+          agent.agent_id === agentId
+            ? { ...agent, agent_name: newName }
+            : agent
+        )
+      );
+    } catch (error) {
+      setError({
+        primaryMessage: "Failed to rename agent. Please try again.",
+        timeout: 5000,
+        type: 'warning'
+      });
+    }
+  };
 
   return (
     <>
@@ -155,6 +189,8 @@ export default function App() {
               selectedAgentId={selectedAgentId}
               onAgentSelect={setSelectedAgentId}
               user={user}
+              onDeleteAgent={handleDeleteAgent}
+              onRenameAgent={handleRenameAgent}
               setUser={setUser}
             />
             <AgentSection user={user} currentAgent={currentAgent} setEditSystemPromptPopup={setEditSystemPromptPopup} />
