@@ -3,7 +3,7 @@ nixPackages = ["nodejs_18"]
 
 [phases.install]
 cmds = [
-  "npm --prefix app ci",
+  "npm --prefix app install",
   "npm --prefix web install"
 ]
 
