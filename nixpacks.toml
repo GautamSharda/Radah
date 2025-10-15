@@ -1,0 +1,16 @@
+[phases.setup]
+nixPackages = ["nodejs_18", "npm"]
+
+[phases.install]
+cmds = [
+  "npm --prefix app ci",
+  "npm --prefix web install"
+]
+
+[phases.build]
+cmds = [
+  "npm --prefix app run build:web"
+]
+
+[start]
+cmd = "npm --prefix web start"
