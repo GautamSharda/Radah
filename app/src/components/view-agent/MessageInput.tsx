@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUpIcon, Cross2Icon, FileTextIcon, SquareIcon, UploadIcon, Pencil1Icon } from "@radix-ui/react-icons";
 import { promptRunningType } from "../AgentSection";
 import Spinner from "../ui/spinner";
-import pdfToText from 'react-pdftotext';
 
 
 interface MessageInputInterface {

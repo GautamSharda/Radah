@@ -30,6 +30,7 @@ yarn-error.log
 # Build outputs
 dist/
 build/
+web/dist/
 
 # Environment variables
 .env

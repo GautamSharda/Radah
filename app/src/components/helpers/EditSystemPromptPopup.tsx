@@ -4,8 +4,8 @@ import { X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Agent } from "@/App"
 import { Textarea } from "../ui/textarea"
-import { core } from "@tauri-apps/api"
 import { useError } from "@/hooks/ErrorContext"
+import { invoke } from "@/lib/platform"
 
 interface EditSystemPromptPopup {
     setEditSystemPromptPopup: (value: boolean) => void;
@@ -26,7 +26,7 @@ export default function EditSystemPromptPopup({ setEditSystemPromptPopup, agent,
         var error = false;
         setSaving(true);
         try {
-            await core.invoke('update_agent_system_prompt', {
+            await invoke('update_agent_system_prompt', {
                 agentId: agent.agent_id,
                 systemPrompt: systemPrompt
             });

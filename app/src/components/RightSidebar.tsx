@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { ChevronRight, ChevronLeft } from "lucide-react"
-import { Agent, Message } from "@/App";
+import { Message } from "@/App";
 import { MessageInput } from "./view-agent/MessageInput";
 import { MessageBubble } from "./view-agent/MessageBubble";
 import { promptRunningType } from "./AgentSection";

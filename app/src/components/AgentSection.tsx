@@ -2,8 +2,16 @@ import { useEffect, useState } from "react";
 import { RightSidebar } from "./RightSidebar";
 import ViewAgent from "./view-agent/ViewAgent";
 import type { Agent, User, Message } from "@/App";
-import { core } from "@tauri-apps/api";
 import { useError } from "@/hooks/ErrorContext";
+import {
+    invoke,
+    isWebPlatform,
+    getWebSocketUrl,
+    recordWebMessage,
+    setWebPromptStatus,
+    createWebAgentReply,
+    nextWebMessageId
+} from "@/lib/platform";
 
 
 interface AgentProps {
@@ -30,12 +38,11 @@ export default function AgentSection({ user, currentAgent, setEditSystemPromptPo
                 //@ts-ignore
                 if (!agentId || !container_id) return;
                 //@ts-ignore
-                await core.invoke('start_container', { containerId: container_id });
-                //wait 2 seconds
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                const messages = await core.invoke<Message[]>('get_agent_messages', { agentId });
+                await invoke('start_container', { containerId: container_id });
+                if (!isWebPlatform) await new Promise(resolve => setTimeout(resolve, 2000));
+                const messages = await invoke<Message[]>('get_agent_messages', { agentId });
                 setMessages(messages);
-                const promptRunning = await core.invoke<string>('get_prompt_running', { agentId });
+                const promptRunning = await invoke<string>('get_prompt_running', { agentId });
                 setPromptRunning(promptRunning as promptRunningType);
                 setSwitchingAgent(false);
             } catch (error) {
@@ -54,6 +61,11 @@ export default function AgentSection({ user, currentAgent, setEditSystemPromptPo
 
     useEffect(() => {
         if (!agentId) return;
+        if (isWebPlatform) {
+            setIsWebSocketOpen(true);
+            return;
+        }
+
         let localWS: WebSocket | null = null;
         let reconnectAttempt = 0;
         let closing = false;
@@ -61,7 +73,9 @@ export default function AgentSection({ user, currentAgent, setEditSystemPromptPo
         const baseDelay = 1000; // Start with 1 second delay
 
         const connect = () => {
-            localWS = new WebSocket('ws://localhost:3030/ws');
+            const socketUrl = getWebSocketUrl();
+            if (!socketUrl) return;
+            localWS = new WebSocket(socketUrl);
             setWs(localWS);
             localWS.addEventListener('open', () => {
                 setIsWebSocketOpen(true);
@@ -104,15 +118,45 @@ export default function AgentSection({ user, currentAgent, setEditSystemPromptPo
     }, [agentId]);
 
     function stopAgent() {
+        if (!agentId) return;
+
+        if (isWebPlatform) {
+            setPromptRunning("stopped");
+            setWebPromptStatus(agentId, "stopped");
+            return;
+        }
+
         setPromptRunning("loading");
         ws?.send(JSON.stringify({ "message-type": "stop", "agent_id": agentId, "show_ui": false }));
     }
 
     const sendMessageWrapper = (prompt: string, files: { name: string; data: string }[] | undefined) => {
         if (!agentId) return;
-        const message = { "message-type": "prompt", "text": prompt, "agent_id": agentId, "show_ui": true };
+        const message = { "message-type": "prompt", "text": prompt, "agent_id": agentId, "show_ui": true } as Message;
         //@ts-ignore
         if (files) message['files'] = files;
+
+        if (isWebPlatform) {
+            const promptMessage: Message = {
+                ...message,
+                message_id: nextWebMessageId(),
+                show_ui: true,
+            };
+            setMessages(prev => [...prev, promptMessage]);
+            recordWebMessage(agentId, promptMessage);
+            setPromptRunning("running");
+            setWebPromptStatus(agentId, "running");
+
+            setTimeout(() => {
+                const reply = createWebAgentReply(agentId);
+                setMessages(prev => [...prev, reply]);
+                recordWebMessage(agentId, reply);
+                setPromptRunning("stopped");
+                setWebPromptStatus(agentId, "stopped");
+            }, 750);
+            return;
+        }
+
         setPromptRunning("running");
         sendMessage(JSON.stringify(message));
     }

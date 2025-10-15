@@ -1,6 +1,6 @@
 import { Message } from "@/App";
 import clsx from "clsx";
-import { CodeBlock, dracula, googlecode } from "react-code-blocks";
+import { CodeBlock, googlecode } from "react-code-blocks";
 
 
 const bubbleStyle = "px-4 py-2 rounded-3xl";

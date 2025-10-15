@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { core, event } from '@tauri-apps/api';
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { RightSidebarProvider } from "@/components/RightSidebar"
 import RenderCard from "./components/helpers/RenderCard";
@@ -8,6 +7,7 @@ import { useError } from "./hooks/ErrorContext";
 import Alert from "./components/helpers/Alert";
 import { LeftSideBar } from "./components/LeftSideBar";
 import EditSystemPromptPopup from "./components/helpers/EditSystemPromptPopup";
+import { invoke, listen, isWebPlatform } from "@/lib/platform";
 
 export interface User {
   show_controls: boolean;
@@ -62,18 +62,24 @@ export default function App() {
   const currentAgent = selectedAgentId ? agents.find(agent => agent.agent_id === selectedAgentId) || undefined : undefined;
 
   useEffect(() => {
-    // Listen for setup completion event
-    const unlisten = event.listen('setup-complete', () => { setIsSetupComplete(true) });
+    if (isWebPlatform) {
+      setIsSetupComplete(true);
+      return;
+    }
+
+    let mounted = true;
+    const unlistenPromise = listen('setup-complete', () => { if (mounted) setIsSetupComplete(true); });
 
     // Check if setup is already complete (in case we missed the event)
     checkSetupStatus();
     return () => {
-      unlisten.then(fn => fn());
+      mounted = false;
+      unlistenPromise.then(fn => fn());
     };
   }, []);
 
   async function checkSetupStatus() {
-    const isComplete = await core.invoke<boolean>('is_setup_complete');
+    const isComplete = await invoke<boolean>('is_setup_complete');
     if (isComplete) setIsSetupComplete(true);
   }
 
@@ -87,10 +93,10 @@ export default function App() {
 
   async function loadUser() {
     try {
-      const user = await core.invoke<User>('get_user_data');
-      // await core.invoke<User>('clear_all_storage');
-      // await core.invoke<User>('print_all_storage');
-      // await core.invoke<User>('clear_all_messages');
+      const user = await invoke<User>('get_user_data');
+      // await invoke<User>('clear_all_storage');
+      // await invoke<User>('print_all_storage');
+      // await invoke<User>('clear_all_messages');
       setUser(user);
     } catch (error) {
       setError({ primaryMessage: "We had an issue loading your settings", timeout: 2500, type: 'warning' });
@@ -99,7 +105,7 @@ export default function App() {
 
   async function loadExistingAgents() {
     try {
-      const containers = await core.invoke<Container[]>('get_all_containers');
+      const containers = await invoke<Container[]>('get_all_containers');
       setAgents(containers);
       if (containers.length > 0) return setSelectedAgentId(containers[0].agent_id);
       setSelectedAgentId(null);
@@ -119,7 +125,7 @@ export default function App() {
     setAgents([...agents, newAgent]);
     setSelectedAgentId(newAgent.agent_id);
     try {
-      const containerInfo = await core.invoke<Container>('create_agent_container', {
+      const containerInfo = await invoke<Container>('create_agent_container', {
         agentId: newAgent.agent_id,
         agentType: selectedAssistant as 'jim' | 'pam',
         agentName: agentName,
@@ -148,7 +154,7 @@ export default function App() {
       setSelectedAgentId(newAgents[0].agent_id);
     }
     try {
-      await core.invoke('delete_agent_container', { agentId });
+      await invoke('delete_agent_container', { agentId });
     } catch (error) {
       setError({ primaryMessage: "Oops! We had an issue deleting your agent. Refresh and try again.", timeout: 5000 });
     }
@@ -156,7 +162,7 @@ export default function App() {
 
   const handleRenameAgent = async (agentId: string, newName: string) => {
     try {
-      await core.invoke('update_agent_name', { agentId, newName });
+      await invoke('update_agent_name', { agentId, newName });
       setAgents(currentAgents =>
         currentAgents.map(agent =>
           agent.agent_id === agentId
@@ -188,10 +194,8 @@ export default function App() {
               onNewAgentClick={() => { setNewAgentPopup(true) }}
               selectedAgentId={selectedAgentId}
               onAgentSelect={setSelectedAgentId}
-              user={user}
               onDeleteAgent={handleDeleteAgent}
               onRenameAgent={handleRenameAgent}
-              setUser={setUser}
             />
             <AgentSection user={user} currentAgent={currentAgent} setEditSystemPromptPopup={setEditSystemPromptPopup} />
           </div>

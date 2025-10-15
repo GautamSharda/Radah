@@ -17,17 +17,12 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { User } from "@/App";
 import { Agent } from "@/App";
-import { core } from "@tauri-apps/api";
-import { useError } from "@/hooks/ErrorContext";
 import { useState } from "react";
 import RenameAgentPopup from "./helpers/RenameAgentPopup";
 
 interface LeftSideBarProps {
   agents: Agent[];
-  user: User | undefined;
-  setUser: (user: User) => void;
   onNewAgentClick: () => void;
   selectedAgentId: string | null;
   onAgentSelect: (agentId: string) => void;
@@ -35,21 +30,9 @@ interface LeftSideBarProps {
   onRenameAgent: (agentId: string, newName: string) => void;
 }
 
-export function LeftSideBar({ agents, onNewAgentClick, selectedAgentId, onAgentSelect, user, setUser, onDeleteAgent, onRenameAgent }: LeftSideBarProps) {
-  const { setError } = useError();
+export function LeftSideBar({ agents, onNewAgentClick, selectedAgentId, onAgentSelect, onDeleteAgent, onRenameAgent }: LeftSideBarProps) {
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
   const [renameAgentPopup, setRenameAgentPopup] = useState<{ agentId: string, name: string } | null>(null);
-
-  async function toggleSwitch() {
-    if (!user) return;
-    const newUser = { ...user, show_controls: !user.show_controls };
-    setUser(newUser);
-    try {
-      await core.invoke('update_user_data', { showControls: !user.show_controls });
-    } catch {
-      setError({ primaryMessage: "Oops! We failed to update your setting. Refresh and try again.", timeout: 5000, type: 'warning' });
-    }
-  }
   console.log("renameAgentPopup");
   console.log(renameAgentPopup);
   return (
@@ -128,14 +111,6 @@ export function LeftSideBar({ agents, onNewAgentClick, selectedAgentId, onAgentS
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            {/* {
-              user && (
-                <div className="w-full justify-between flex items-center">
-                  <p>Hide computer controls</p>
-                  <Switch checked={!user.show_controls} onCheckedChange={toggleSwitch} />
-                </div>
-              )
-            } */}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
